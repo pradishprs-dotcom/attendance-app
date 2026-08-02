@@ -254,6 +254,7 @@
     <button class="btn" id="btnDepts">Manage departments</button>
     <button class="btn" id="btnBulk">Bulk import</button>
     <button class="btn" id="btnExport">Export salary report (CSV)</button>
+    <button class="btn" id="btnExportDaily">Export daily log (CSV)</button>
     <button class="btn primary" id="btnAdd">+ Add employee</button>
   </div>
 
@@ -1030,6 +1031,37 @@
   }
 
   /* ---------------- CSV export ---------------- */
+  function csvEscape(v){
+    v = String(v==null?'':v);
+    if(v.indexOf(',')>-1 || v.indexOf('"')>-1 || v.indexOf('\n')>-1){ v = '"'+v.replace(/"/g,'""')+'"'; }
+    return v;
+  }
+  function downloadCsv(rows, filename){
+    var csv = rows.map(function(r){ return r.map(csvEscape).join(','); }).join('\n');
+    var blob = new Blob([csv], {type:'text/csv'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+  function timeToMinutes(t){
+    if(!t) return null;
+    var p = t.split(':');
+    return parseInt(p[0],10)*60 + parseInt(p[1],10);
+  }
+  function computeDurationHrs(inT, outT){
+    if(!inT || !outT) return '';
+    var a = timeToMinutes(inT), b = timeToMinutes(outT);
+    if(a==null || b==null) return '';
+    var diff = b - a;
+    if(diff < 0) diff += 1440; // crossed midnight (night shift)
+    return (diff/60).toFixed(2);
+  }
+
   function exportCsv(){
     var list = filteredEmployees();
     var months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -1038,23 +1070,28 @@
       var t = computeTotals(e.id);
       rows.push([idx+1, e.staffId, e.name, e.dept, e.gender, t.P, t.N, t.A, t.WO, t.H, t.HD, t.PL, (t.payable%1===0?t.payable:t.payable.toFixed(1)), months[state.current.getMonth()]+' '+state.current.getFullYear()]);
     });
-    var csv = rows.map(function(r){
-      return r.map(function(v){
-        v = String(v==null?'':v);
-        if(v.indexOf(',')>-1 || v.indexOf('"')>-1){ v = '"'+v.replace(/"/g,'""')+'"'; }
-        return v;
-      }).join(',');
-    }).join('\n');
-    var blob = new Blob([csv], {type:'text/csv'});
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = 'salary-attendance-report-' + monthKey(state.current) + '.csv';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    downloadCsv(rows, 'salary-attendance-report-' + monthKey(state.current) + '.csv');
     toast('Report downloaded');
+  }
+
+  function exportDailyLogCsv(){
+    var list = filteredEmployees();
+    var dim = daysInMonth(state.current);
+    var year = state.current.getFullYear(), month = state.current.getMonth();
+    var rows = [['Sr','StaffID','Name','Department','Date','Duty','InTime','OutTime','DurationHrs','Remarks']];
+    var sr = 0;
+    list.forEach(function(e){
+      for(var d=1; d<=dim; d++){
+        var rec = getRecord(e.id, d);
+        if(!rec.c && !rec.r && !rec.inT && !rec.outT) continue; // skip untouched days
+        sr++;
+        var dateStr = year + '-' + pad2(month+1) + '-' + pad2(d);
+        rows.push([sr, e.staffId, e.name, e.dept, dateStr, rec.c||'', rec.inT||'', rec.outT||'', computeDurationHrs(rec.inT, rec.outT), rec.r||'']);
+      }
+    });
+    if(sr === 0){ toast('No check-in/out or marked days this month yet'); return; }
+    downloadCsv(rows, 'daily-log-' + monthKey(state.current) + '.csv');
+    toast('Daily log downloaded');
   }
 
   /* ---------------- Kiosk (main-gate QR check-in/out) ---------------- */
@@ -1204,6 +1241,7 @@
   document.getElementById('btnBulk').onclick = openBulkModal;
   document.getElementById('btnDepts').onclick = openDeptModal;
   document.getElementById('btnExport').onclick = exportCsv;
+  document.getElementById('btnExportDaily').onclick = exportDailyLogCsv;
   document.getElementById('btnKiosk').onclick = function(){ enterKiosk(false); };
   document.getElementById('btnStaffLink').onclick = openStaffLinkModal;
   document.getElementById('btnLock').onclick = function(){
