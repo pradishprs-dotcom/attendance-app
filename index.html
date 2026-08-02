@@ -1,8 +1,1343 @@
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if true;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Roster & Attendance — HR Console</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+<style>
+  :root{
+    --ink:#1c2130;
+    --ink-soft:#4d5568;
+    --paper:#f6f5f2;
+    --panel:#ffffff;
+    --line:#e2e1da;
+    --navy:#232b45;
+    --navy-deep:#171c2e;
+    --amber:#c8792a;
+    --amber-soft:#f3e3cf;
+    --p:#2f8f5b;   --p-bg:#e3f3ea;
+    --a:#c3423f;   --a-bg:#fbe6e5;
+    --wo:#8891a3;  --wo-bg:#eaecf0;
+    --h:#3a5fc4;   --h-bg:#e6ebfa;
+    --hd:#c07a1e;  --hd-bg:#f7ecd8;
+    --pl:#8548a6;  --pl-bg:#f0e5f6;
+    --n:#3d3487;   --n-bg:#e6e3f7;
+    --radius:10px;
+    --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+    font-size:14px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .app{max-width:100%;padding:0 0 60px 0;display:none;}
+
+  header.top{
+    background:linear-gradient(135deg,var(--navy-deep),var(--navy));
+    color:#fff;
+    padding:22px 28px 18px;
+    display:flex;
+    align-items:flex-end;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:16px;
+  }
+  .brand-eyebrow{text-transform:uppercase;letter-spacing:.16em;font-size:10.5px;color:#a9b0c9;font-weight:600;margin:0 0 6px;}
+  .brand-title{font-size:26px;font-weight:700;margin:0;letter-spacing:-.01em;}
+  .brand-sub{color:#9aa2bd;font-size:12.5px;margin-top:4px;}
+  .head-actions{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+  .kiosk-launch{
+    background:var(--amber);color:#fff;border:none;padding:9px 16px;border-radius:8px;
+    font-weight:700;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:7px;
+  }
+  .kiosk-launch:hover{background:#b5691f;}
+  .month-nav{display:flex;align-items:center;gap:10px;}
+  .month-nav button{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);color:#fff;width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;}
+  .month-nav button:hover{background:rgba(255,255,255,.18);}
+  .month-label{font-weight:700;font-size:17px;min-width:150px;text-align:center;letter-spacing:.01em;}
+
+  .summary-strip{display:flex;gap:14px;flex-wrap:wrap;padding:16px 28px;background:var(--panel);border-bottom:1px solid var(--line);}
+  .stat{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);padding:10px 16px;min-width:108px;}
+  .stat .num{font-size:20px;font-weight:700;font-family:var(--mono);}
+  .stat .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);margin-top:2px;}
+  .stat.male .num{color:var(--h);}
+  .stat.female .num{color:var(--pl);}
+  .stat.night .num{color:var(--n);}
+
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:14px 28px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:30;}
+  .toolbar input[type=text], .toolbar select{padding:8px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px;background:#fff;color:var(--ink);}
+  .toolbar input[type=text]{width:190px;}
+  .spacer{flex:1;}
+  .btn{padding:8px 14px;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;}
+  .btn:hover{border-color:#c7c5ba;background:#fbfaf7;}
+  .btn.primary{background:var(--navy);color:#fff;border-color:var(--navy);}
+  .btn.primary:hover{background:var(--navy-deep);}
+  .btn.amber{background:var(--amber);color:#fff;border-color:var(--amber);}
+  .btn.ghost{background:transparent;}
+  .btn.danger{color:var(--a);}
+  .btn.small{padding:5px 9px;font-size:12px;}
+
+  .legend{display:flex;gap:8px;flex-wrap:wrap;padding:10px 28px;background:var(--paper);align-items:center;}
+  .chip{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink-soft);font-weight:600;}
+  .swatch{width:13px;height:13px;border-radius:4px;display:inline-block;}
+
+  .table-wrap{overflow:auto;margin:0 28px;border:1px solid var(--line);border-radius:var(--radius);background:#fff;max-height:70vh;}
+  table{border-collapse:separate;border-spacing:0;width:100%;font-size:12.5px;}
+  thead th{position:sticky;top:0;background:var(--navy);color:#fff;font-weight:600;padding:8px 6px;text-align:center;z-index:10;border-bottom:1px solid var(--navy-deep);white-space:nowrap;}
+  thead th.weekend-h{background:#3a4468;}
+  th.col-sr, td.col-sr{position:sticky;left:0;z-index:15;background:var(--navy);width:38px;text-align:center;color:#fff;}
+  td.col-sr{background:#fff;color:var(--ink-soft);border-right:1px solid var(--line);}
+  th.col-name, td.col-name{position:sticky;left:38px;z-index:15;background:var(--navy);color:#fff;min-width:210px;text-align:left;padding-left:12px;}
+  td.col-name{background:#fff;border-right:1px solid var(--line);cursor:pointer;}
+  td.col-name:hover{background:#fafaf6;}
+  .emp-name{font-weight:700;color:var(--ink);font-size:13px;}
+  .emp-meta{font-size:10.5px;color:var(--ink-soft);margin-top:1px;}
+  .emp-meta .sid{font-family:var(--mono);color:var(--amber);font-weight:700;}
+  .gender-tag{display:inline-block;font-size:10px;font-weight:700;padding:1px 6px;border-radius:20px;margin-left:6px;}
+  .gender-tag.M{background:var(--h-bg);color:var(--h);}
+  .gender-tag.F{background:var(--pl-bg);color:var(--pl);}
+  .avatar{width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;background:var(--navy);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:11.5px;border:1px solid var(--line);vertical-align:middle;}
+  .avatar.lg{width:64px;height:64px;font-size:20px;}
+  .avatar.xl{width:84px;height:84px;font-size:26px;}
+  .row-flex{display:flex;align-items:center;gap:9px;}
+  .photo-upload-row{display:flex;align-items:center;gap:14px;margin-bottom:4px;}
+  .photo-upload-actions{display:flex;flex-direction:column;gap:6px;}
+  .photo-upload-actions input[type=file]{font-size:11.5px;}
+  .photo-remove-link{background:none;border:none;color:var(--a);font-size:11.5px;font-weight:600;cursor:pointer;padding:0;text-align:left;}
+  .qr-btn{border:none;background:none;cursor:pointer;font-size:13px;margin-left:4px;opacity:.65;}
+  .qr-btn:hover{opacity:1;}
+
+  tbody tr:nth-child(even) td.col-sr, tbody tr:nth-child(even) td.col-name{background:#fbfaf7;}
+  tbody tr:hover td.col-sr, tbody tr:hover td.col-name{background:#f3f1ea;}
+
+  td.day-cell{width:30px;height:38px;text-align:center;border-right:1px solid #f0efe9;border-bottom:1px solid #f0efe9;cursor:pointer;font-weight:700;font-family:var(--mono);user-select:none;position:relative;}
+  td.day-cell.weekend{background:#fbf9f4;}
+  td.day-cell:hover{outline:2px solid var(--amber) inset;}
+  td.day-cell.st-P{background:var(--p-bg);color:var(--p);}
+  td.day-cell.st-A{background:var(--a-bg);color:var(--a);}
+  td.day-cell.st-WO{background:var(--wo-bg);color:var(--wo);}
+  td.day-cell.st-H{background:var(--h-bg);color:var(--h);}
+  td.day-cell.st-HD{background:var(--hd-bg);color:var(--hd);}
+  td.day-cell.st-PL{background:var(--pl-bg);color:var(--pl);}
+  td.day-cell.st-N{background:var(--n-bg);color:var(--n);}
+  .rmk-dot{position:absolute;top:2px;right:3px;width:5px;height:5px;border-radius:50%;background:var(--amber);}
+
+  td.sum-cell{text-align:center;font-family:var(--mono);font-weight:700;border-right:1px solid var(--line);background:#fdfcfa;}
+  th.sum-h{background:var(--amber);}
+  td.payable{color:var(--amber);font-weight:800;background:var(--amber-soft);}
+  td.col-del{position:sticky;right:0;background:#fff;text-align:center;border-left:1px solid var(--line);}
+
+  .empty-state{padding:60px 28px;text-align:center;color:var(--ink-soft);}
+  .empty-state h3{color:var(--ink);margin-bottom:6px;}
+
+  .overlay{position:fixed;inset:0;background:rgba(23,28,46,.55);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px;}
+  .modal{background:#fff;border-radius:14px;width:100%;max-width:440px;max-height:88vh;overflow:auto;padding:22px 24px 24px;box-shadow:0 20px 60px rgba(0,0,0,.3);position:relative;}
+  .modal.wide{max-width:640px;}
+  .modal h2{margin:0 0 4px;font-size:18px;}
+  .modal .sub{color:var(--ink-soft);font-size:12.5px;margin-bottom:16px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:5px;}
+  .field input[type=text], .field select, .field textarea{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;font-family:inherit;}
+  .field textarea{min-height:70px;resize:vertical;}
+  .field-row{display:flex;gap:10px;}
+  .field-row .field{flex:1;}
+  .radio-row{display:flex;gap:16px;}
+  .radio-row label{display:flex;align-items:center;gap:6px;font-weight:600;color:var(--ink);text-transform:none;font-size:13.5px;}
+  .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px;}
+  .close-x{position:absolute;top:16px;right:18px;background:none;border:none;font-size:18px;cursor:pointer;color:var(--ink-soft);}
+
+  .cal-emp-head{display:flex;justify-content:flex-start;align-items:center;gap:14px;margin-bottom:14px;}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;}
+  .cal-dow{text-align:center;font-size:10.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;padding-bottom:4px;}
+  .cal-cell{aspect-ratio:1/1;border-radius:8px;border:1px solid var(--line);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;font-weight:700;font-family:var(--mono);font-size:13px;background:#fff;position:relative;}
+  .cal-cell.blank{border:none;cursor:default;}
+  .cal-cell .code{font-size:9.5px;margin-top:1px;letter-spacing:.03em;}
+  .cal-cell.st-P{background:var(--p-bg);color:var(--p);border-color:var(--p);}
+  .cal-cell.st-A{background:var(--a-bg);color:var(--a);border-color:var(--a);}
+  .cal-cell.st-WO{background:var(--wo-bg);color:var(--wo);border-color:var(--wo);}
+  .cal-cell.st-H{background:var(--h-bg);color:var(--h);border-color:var(--h);}
+  .cal-cell.st-HD{background:var(--hd-bg);color:var(--hd);border-color:var(--hd);}
+  .cal-cell.st-PL{background:var(--pl-bg);color:var(--pl);border-color:var(--pl);}
+  .cal-cell.st-N{background:var(--n-bg);color:var(--n);border-color:var(--n);}
+  .cal-legend-hint{font-size:11px;color:var(--ink-soft);margin-top:12px;text-align:center;}
+  .cal-summary{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px dashed var(--line);}
+  .cal-summary .pill{font-size:11px;font-weight:700;padding:5px 9px;border-radius:20px;background:var(--paper);display:flex;gap:5px;align-items:center;}
+
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--navy-deep);color:#fff;padding:10px 20px;border-radius:30px;font-size:13px;font-weight:600;z-index:200;box-shadow:0 8px 24px rgba(0,0,0,.25);opacity:0;transition:opacity .25s ease;pointer-events:none;}
+  .toast.show{opacity:1;}
+
+  ::-webkit-scrollbar{height:10px;width:10px;}
+  ::-webkit-scrollbar-thumb{background:#d8d6cc;border-radius:10px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+
+  /* ===== Kiosk ===== */
+  .kiosk{min-height:100vh;background:radial-gradient(circle at top,#232b45,#0f1220);color:#fff;display:flex;flex-direction:column;align-items:center;padding:30px 18px 50px;}
+  .kiosk-exit{align-self:flex-start;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);color:#fff;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:12.5px;font-weight:600;}
+  .kiosk-title{text-align:center;margin:18px 0 4px;font-size:24px;font-weight:800;}
+  .kiosk-sub{color:#9aa2bd;font-size:13px;margin-bottom:22px;text-align:center;}
+  .kiosk-cam-wrap{width:100%;max-width:380px;aspect-ratio:1/1;border-radius:20px;overflow:hidden;background:#000;border:3px solid rgba(255,255,255,.15);position:relative;}
+  .kiosk-cam-wrap video{width:100%;height:100%;object-fit:cover;}
+  .kiosk-status{margin-top:16px;font-size:15px;font-weight:700;text-align:center;min-height:22px;}
+  .kiosk-status.ok{color:#7ee2a8;}
+  .kiosk-status.err{color:#ff9b93;}
+  .kiosk-flash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .15s;z-index:5;}
+  .kiosk-flash.on{opacity:.85;}
+  .kiosk-result{margin-top:18px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:16px 22px;text-align:center;min-width:260px;}
+  .kiosk-result .r-name{font-size:19px;font-weight:800;}
+  .kiosk-result .r-id{font-family:var(--mono);color:#a9b0c9;font-size:12px;}
+  .kiosk-result .r-action{margin-top:8px;font-size:14px;font-weight:700;padding:5px 14px;border-radius:20px;display:inline-block;}
+  .kiosk-result .r-action.in{background:#1f4a33;color:#7ee2a8;}
+  .kiosk-result .r-action.out{background:#4a2020;color:#ff9b93;}
+  .kiosk-manual{margin-top:26px;width:100%;max-width:380px;}
+  .kiosk-manual summary{cursor:pointer;color:#9aa2bd;font-size:12.5px;text-align:center;margin-bottom:10px;}
+  .kiosk-manual input{width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.06);color:#fff;font-size:13.5px;margin-bottom:8px;}
+  .kiosk-manual input::placeholder{color:#7a819c;}
+  .kiosk-match{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:9px 12px;display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+  .kiosk-match .nm{font-weight:700;font-size:13px;}
+  .kiosk-match .idn{font-family:var(--mono);font-size:11px;color:#9aa2bd;}
+  .kiosk-match button{background:var(--amber);border:none;color:#fff;padding:6px 12px;border-radius:7px;font-weight:700;font-size:12px;cursor:pointer;}
+
+  .qr-card{text-align:center;}
+  .qr-card #qrCanvasHost{display:flex;justify-content:center;margin:14px 0;}
+  .qr-card .idcard-name{font-size:17px;font-weight:800;}
+  .qr-card .idcard-meta{color:var(--ink-soft);font-size:12.5px;margin-top:2px;}
+  .qr-card .idcard-id{font-family:var(--mono);color:var(--amber);font-weight:700;margin-top:6px;font-size:14px;}
+
+  @media (max-width:720px){
+    header.top{padding:16px;}
+    .toolbar, .summary-strip, .legend{padding-left:16px;padding-right:16px;}
+    .table-wrap{margin:0 16px;}
+  }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+
+  <header class="top">
+    <div>
+      <p class="brand-eyebrow">Attendance Department</p>
+      <h1 class="brand-title">Roster &amp; Attendance Console</h1>
+      <p class="brand-sub" id="empCountLine">Loading roster…</p>
+      <p class="brand-sub" id="storageBadge" style="margin-top:2px;"></p>
+    </div>
+    <div class="head-actions">
+      <button class="kiosk-launch" id="btnLock" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);" title="Lock the admin console">🔒 Lock</button>
+      <button class="kiosk-launch" id="btnStaffLink" style="background:var(--navy);">🔗 Staff check-in link</button>
+      <button class="kiosk-launch" id="btnKiosk">🚪 Open Gate Kiosk</button>
+      <div class="month-nav">
+        <button id="prevMonth" title="Previous month">‹</button>
+        <div class="month-label" id="monthLabel">—</div>
+        <button id="nextMonth" title="Next month">›</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="summary-strip" id="summaryStrip"></div>
+
+  <div class="toolbar">
+    <input type="text" id="searchBox" placeholder="Search name or staff ID…">
+    <select id="deptFilter"><option value="">All departments</option></select>
+    <select id="genderFilter">
+      <option value="">All genders</option>
+      <option value="M">Male</option>
+      <option value="F">Female</option>
+    </select>
+    <div class="spacer"></div>
+    <button class="btn" id="btnDepts">Manage departments</button>
+    <button class="btn" id="btnBulk">Bulk import</button>
+    <button class="btn" id="btnExport">Export salary report (CSV)</button>
+    <button class="btn primary" id="btnAdd">+ Add employee</button>
+  </div>
+
+  <div class="legend" id="legend"></div>
+
+  <div id="tableHost"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+
+  /* ---------------- Config ---------------- */
+  var STATUS = [
+    {code:'', label:'Not marked', bg:'#fff', fg:'#999'},
+    {code:'P', label:'Present (Day Shift)', bg:'var(--p-bg)', fg:'var(--p)'},
+    {code:'N', label:'Night Shift', bg:'var(--n-bg)', fg:'var(--n)'},
+    {code:'A', label:'Absent', bg:'var(--a-bg)', fg:'var(--a)'},
+    {code:'WO', label:'Week Off', bg:'var(--wo-bg)', fg:'var(--wo)'},
+    {code:'H', label:'Holiday', bg:'var(--h-bg)', fg:'var(--h)'},
+    {code:'HD', label:'Half Day', bg:'var(--hd-bg)', fg:'var(--hd)'},
+    {code:'PL', label:'Paid Leave', bg:'var(--pl-bg)', fg:'var(--pl)'}
+  ];
+  var TOTAL_CODES = ['P','N','A','WO','H','HD','PL'];
+  var DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  // NOTE: employee & attendance data are stored in SHARED storage so the
+  // gate kiosk (main-gate device) and the admin console stay in sync on
+  // this page. Anyone with access to this page can see/edit this data.
+  var SHARED = true;
+
+  // ================================================================
+  // FIREBASE CONFIG — paste your project's config object here.
+  // Get this from: Firebase console → Project settings → your web app.
+  // Once this is filled in, every device (admin console, gate kiosk,
+  // staff phones) will read and write the exact same live data.
+  // Leave the PASTE_... placeholders as-is if you haven't set this up
+  // yet — the app will keep working using per-browser local storage.
+  // ================================================================
+  var FIREBASE_CONFIG = {
+    apiKey: "PASTE_YOUR_API_KEY_HERE",
+    authDomain: "PASTE_YOUR_AUTH_DOMAIN_HERE",
+    projectId: "PASTE_YOUR_PROJECT_ID_HERE",
+    storageBucket: "PASTE_YOUR_STORAGE_BUCKET_HERE",
+    messagingSenderId: "PASTE_YOUR_SENDER_ID_HERE",
+    appId: "PASTE_YOUR_APP_ID_HERE"
+  };
+  // ================================================================
+
+  var FIREBASE_READY = false;
+  var fsDb = null;
+  var FS_COLLECTION = 'attendance_app_data';
+  try{
+    if(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey.indexOf('PASTE_') !== 0 && window.firebase){
+      firebase.initializeApp(FIREBASE_CONFIG);
+      fsDb = firebase.firestore();
+      FIREBASE_READY = true;
+    }
+  }catch(e){ FIREBASE_READY = false; }
+
+  /* ---------------- State ---------------- */
+  var state = {
+    employees: [],
+    departments: [],
+    attendance: {},
+    current: new Date(2026, 7, 1),
+    filters: {search:'', dept:'', gender:''},
+    modalCalEmpId: null,
+    view: 'admin',
+    kioskStream: null,
+    kioskRAF: null,
+    kioskBusyUntil: 0,
+    kioskLocked: false,
+    kioskRefreshTimer: null
+  };
+
+  function monthKey(d){ return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); }
+  function daysInMonth(d){ return new Date(d.getFullYear(), d.getMonth()+1, 0).getDate(); }
+  function uid(){ return 'e' + Math.random().toString(36).slice(2,9) + Date.now().toString(36).slice(-3); }
+  function pad2(n){ return String(n).padStart(2,'0'); }
+  function timeNow(){ var d=new Date(); return pad2(d.getHours())+':'+pad2(d.getMinutes()); }
+  function isNightHour(d){ var h=d.getHours(); return (h>=20 || h<6); }
+
+  /* ---------------- Storage ---------------- */
+  // Priority: Firebase (real cross-device sync, once configured above) >
+  // window.storage (only exists inside the Claude.ai chat/artifact preview) >
+  // the browser's own localStorage (per-device fallback so refreshing never
+  // loses data, even without Firebase set up).
+  var HAS_CLOUD = (typeof window.storage !== 'undefined' && window.storage && typeof window.storage.get === 'function');
+
+  async function storageGet(key){
+    if(FIREBASE_READY){
+      try{
+        var doc = await fsDb.collection(FS_COLLECTION).doc(key).get();
+        return doc.exists ? doc.data().value : null;
+      }catch(e){ console.error('Firestore get failed', e); return null; }
+    }
+    if(HAS_CLOUD){
+      try{ var r = await window.storage.get(key, SHARED); return (r && r.value) ? r.value : null; }
+      catch(e){ return null; }
+    }
+    try{ return localStorage.getItem('ATT_' + key); }catch(e){ return null; }
+  }
+  async function storageSet(key, value){
+    if(FIREBASE_READY){
+      try{ await fsDb.collection(FS_COLLECTION).doc(key).set({value: value, updatedAt: Date.now()}); return true; }
+      catch(e){ console.error('Firestore set failed', e); return false; }
+    }
+    if(HAS_CLOUD){
+      try{ await window.storage.set(key, value, SHARED); return true; }catch(e){ return false; }
+    }
+    try{ localStorage.setItem('ATT_' + key, value); return true; }catch(e){ return false; }
+  }
+
+  async function loadEmployees(){
+    var v = await storageGet('att_employees');
+    try{ state.employees = v ? JSON.parse(v) : []; }catch(e){ state.employees = []; }
+  }
+  async function saveEmployees(){
+    var ok = await storageSet('att_employees', JSON.stringify(state.employees));
+    if(!ok) toast('Could not save roster');
+  }
+  async function loadDepartments(){
+    var v = await storageGet('att_departments');
+    try{ state.departments = v ? JSON.parse(v) : []; }catch(e){ state.departments = []; }
+  }
+  async function saveDepartments(){
+    var ok = await storageSet('att_departments', JSON.stringify(state.departments));
+    if(!ok) toast('Could not save departments');
+  }
+  async function loadAttendanceForMonth(mk){
+    if(state.attendance[mk]) return;
+    var v = await storageGet('att_data_' + mk);
+    try{ state.attendance[mk] = v ? JSON.parse(v) : {}; }catch(e){ state.attendance[mk] = {}; }
+  }
+  async function saveAttendanceForMonth(mk){
+    var ok = await storageSet('att_data_' + mk, JSON.stringify(state.attendance[mk] || {}));
+    if(!ok) toast('Could not save attendance');
+  }
+
+  function toast(msg){
+    var t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toast._h);
+    toast._h = setTimeout(function(){ t.classList.remove('show'); }, 1900);
+  }
+
+  /* ---------------- Record helpers ---------------- */
+  function getRecord(empId, day, mk){
+    mk = mk || monthKey(state.current);
+    var m = state.attendance[mk] || {};
+    var e = m[empId] || {};
+    var rec = e[day];
+    if(!rec) return {c:'', r:'', inT:'', outT:'', lastAction:''};
+    if(typeof rec === 'string') return {c:rec, r:'', inT:'', outT:'', lastAction:''};
+    return Object.assign({c:'', r:'', inT:'', outT:'', lastAction:''}, rec);
+  }
+  function setRecord(empId, day, patch, mk){
+    mk = mk || monthKey(state.current);
+    if(!state.attendance[mk]) state.attendance[mk] = {};
+    if(!state.attendance[mk][empId]) state.attendance[mk][empId] = {};
+    var cur = getRecord(empId, day, mk);
+    var next = Object.assign({}, cur, patch);
+    if(!next.c && !next.r && !next.inT && !next.outT){
+      delete state.attendance[mk][empId][day];
+    } else {
+      state.attendance[mk][empId][day] = next;
+    }
+    saveAttendanceForMonth(mk);
+    return next;
+  }
+  function computeTotals(empId){
+    var dim = daysInMonth(state.current);
+    var t = {P:0,N:0,A:0,WO:0,H:0,HD:0,PL:0};
+    for(var d=1; d<=dim; d++){
+      var rec = getRecord(empId, d);
+      if(rec.c && t.hasOwnProperty(rec.c)) t[rec.c]++;
+    }
+    var payable = t.P + t.N + t.WO + t.H + t.PL + t.HD*0.5;
+    return Object.assign({}, t, {payable: payable});
+  }
+  function isWeekend(year, month, day){
+    return new Date(year, month, day).getDay() === 0;
+  }
+  function departmentList(){
+    var s = {};
+    state.departments.forEach(function(d){ if(d) s[d]=true; });
+    state.employees.forEach(function(e){ if(e.dept) s[e.dept]=true; });
+    return Object.keys(s).sort();
+  }
+  function filteredEmployees(){
+    var f = state.filters;
+    return state.employees.filter(function(e){
+      if(f.search){
+        var q = f.search.toLowerCase();
+        if(e.name.toLowerCase().indexOf(q)===-1 && (e.staffId||'').toLowerCase().indexOf(q)===-1) return false;
+      }
+      if(f.dept && e.dept !== f.dept) return false;
+      if(f.gender && e.gender !== f.gender) return false;
+      return true;
+    });
+  }
+  function nextStaffId(){
+    var max = 0;
+    state.employees.forEach(function(e){
+      var m = (e.staffId||'').match(/(\d+)$/);
+      if(m) max = Math.max(max, parseInt(m[1],10));
+    });
+    return 'STF' + String(max+1).padStart(4,'0');
+  }
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+  function initials(name){
+    var parts = String(name||'').trim().split(/\s+/).filter(Boolean);
+    if(parts.length===0) return '?';
+    if(parts.length===1) return parts[0].slice(0,2).toUpperCase();
+    return (parts[0][0]+parts[parts.length-1][0]).toUpperCase();
+  }
+  function avatarHtml(emp, sizeClass){
+    var cls = 'avatar' + (sizeClass ? ' '+sizeClass : '');
+    if(emp.photo){
+      return '<img class="'+cls+'" src="'+emp.photo+'" alt="">';
+    }
+    return '<div class="'+cls+'">'+initials(emp.name)+'</div>';
+  }
+  function resizeImageFile(file, maxDim, quality){
+    return new Promise(function(resolve, reject){
+      var reader = new FileReader();
+      reader.onload = function(e){
+        var img = new Image();
+        img.onload = function(){
+          var w = img.width, h = img.height;
+          var scale = Math.min(1, maxDim / Math.max(w, h));
+          var cw = Math.max(1, Math.round(w * scale));
+          var ch = Math.max(1, Math.round(h * scale));
+          var canvas = document.createElement('canvas');
+          canvas.width = cw; canvas.height = ch;
+          var ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, cw, ch);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = function(){ reject(new Error('Could not read image')); };
+        img.src = e.target.result;
+      };
+      reader.onerror = function(){ reject(new Error('Could not read file')); };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  /* ---------------- Rendering (admin) ---------------- */
+  function renderLegend(){
+    var host = document.getElementById('legend');
+    host.innerHTML = STATUS.filter(function(s){return s.code!=='';}).map(function(s){
+      return '<span class="chip"><span class="swatch" style="background:'+s.bg+';border:1px solid '+s.fg+'"></span>'+s.code+' — '+s.label+'</span>';
+    }).join('') + '<span class="chip" style="margin-left:8px;color:#9a9585;">Click any date to choose a duty, add a remark, or view check-in/out times</span>';
+  }
+
+  function renderMonthLabel(){
+    var months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    document.getElementById('monthLabel').textContent = months[state.current.getMonth()] + ' ' + state.current.getFullYear();
+  }
+
+  function renderSummaryStrip(){
+    var list = filteredEmployees();
+    var male = list.filter(function(e){return e.gender==='M';}).length;
+    var female = list.filter(function(e){return e.gender==='F';}).length;
+    var depts = departmentList().length;
+    var today = new Date();
+    var onNightToday = 0, presentToday = 0;
+    var isThisMonth = today.getFullYear()===state.current.getFullYear() && today.getMonth()===state.current.getMonth();
+    if(isThisMonth){
+      list.forEach(function(e){
+        var c = getRecord(e.id, today.getDate()).c;
+        if(c==='P') presentToday++;
+        if(c==='N') onNightToday++;
+      });
+    }
+    var host = document.getElementById('summaryStrip');
+    host.innerHTML =
+      '<div class="stat"><div class="num">'+list.length+'</div><div class="lbl">Employees shown</div></div>'+
+      '<div class="stat male"><div class="num">'+male+'</div><div class="lbl">Male</div></div>'+
+      '<div class="stat female"><div class="num">'+female+'</div><div class="lbl">Female</div></div>'+
+      '<div class="stat"><div class="num">'+depts+'</div><div class="lbl">Departments</div></div>'+
+      (isThisMonth ? '<div class="stat"><div class="num" style="color:var(--p)">'+presentToday+'</div><div class="lbl">Present today</div></div>' : '') +
+      (isThisMonth ? '<div class="stat night"><div class="num">'+onNightToday+'</div><div class="lbl">Night shift today</div></div>' : '');
+    document.getElementById('empCountLine').textContent = state.employees.length + ' total employees on roster';
+  }
+
+  function renderFilterOptions(){
+    var sel = document.getElementById('deptFilter');
+    var current = sel.value;
+    sel.innerHTML = '<option value="">All departments</option>' + departmentList().map(function(d){
+      return '<option value="'+escapeHtml(d)+'">'+escapeHtml(d)+'</option>';
+    }).join('');
+    sel.value = current;
+  }
+
+  function renderTable(){
+    var host = document.getElementById('tableHost');
+    var list = filteredEmployees();
+    var dim = daysInMonth(state.current);
+    var year = state.current.getFullYear(), month = state.current.getMonth();
+
+    if(state.employees.length === 0){
+      host.innerHTML = '<div class="empty-state"><h3>No employees yet</h3><p>Add your first employee or use Bulk import to load your team of 200.</p></div>';
+      return;
+    }
+    if(list.length === 0){
+      host.innerHTML = '<div class="empty-state"><h3>No matches</h3><p>Try clearing your search or filters.</p></div>';
+      return;
+    }
+
+    var html = '<div class="table-wrap"><table><thead><tr>';
+    html += '<th class="col-sr">#</th><th class="col-name">Employee</th>';
+    for(var d=1; d<=dim; d++){
+      var wknd = isWeekend(year, month, d);
+      html += '<th class="'+(wknd?'weekend-h':'')+'">'+d+'<br><span style="opacity:.6;font-weight:400;">'+DOW[new Date(year,month,d).getDay()].slice(0,1)+'</span></th>';
+    }
+    TOTAL_CODES.forEach(function(code){ html += '<th class="sum-h">'+code+'</th>'; });
+    html += '<th class="sum-h">Payable</th><th></th>';
+    html += '</tr></thead><tbody>';
+
+    list.forEach(function(e, idx){
+      var totals = computeTotals(e.id);
+      html += '<tr>';
+      html += '<td class="col-sr">'+(idx+1)+'</td>';
+      html += '<td class="col-name" data-open-cal="'+e.id+'"><div class="row-flex">'+avatarHtml(e)+
+              '<div><div class="emp-name">'+escapeHtml(e.name)+
+              '<span class="gender-tag '+e.gender+'">'+e.gender+'</span>'+
+              '<button class="qr-btn" data-open-qr="'+e.id+'" title="View / print ID card QR">🪪</button></div>'+
+              '<div class="emp-meta"><span class="sid">'+escapeHtml(e.staffId||'—')+'</span> · '+escapeHtml(e.dept||'—')+'</div></div></div></td>';
+      for(var d=1; d<=dim; d++){
+        var rec = getRecord(e.id, d);
+        var wknd = isWeekend(year, month, d);
+        var titleParts = [];
+        if(rec.inT) titleParts.push('In '+rec.inT);
+        if(rec.outT) titleParts.push('Out '+rec.outT);
+        if(rec.r) titleParts.push('Remark: '+rec.r);
+        html += '<td class="day-cell '+(wknd?'weekend ':'')+(rec.c?'st-'+rec.c:'')+'" data-emp="'+e.id+'" data-day="'+d+'" title="'+escapeHtml(titleParts.join(' · '))+'">'+(rec.c||'')+
+                (rec.r ? '<span class="rmk-dot"></span>' : '')+'</td>';
+      }
+      TOTAL_CODES.forEach(function(code){ html += '<td class="sum-cell">'+totals[code]+'</td>'; });
+      html += '<td class="sum-cell payable">'+ (totals.payable % 1 === 0 ? totals.payable : totals.payable.toFixed(1)) +'</td>';
+      html += '<td class="col-del"><button class="btn small" data-edit="'+e.id+'" title="Edit employee" style="margin-right:4px;">✎</button><button class="btn small danger" data-del="'+e.id+'" title="Remove employee">✕</button></td>';
+      html += '</tr>';
+    });
+
+    html += '</tbody></table></div>';
+    host.innerHTML = html;
+
+    host.querySelectorAll('.day-cell').forEach(function(cell){
+      cell.addEventListener('click', function(){
+        openDayEditor(cell.getAttribute('data-emp'), parseInt(cell.getAttribute('data-day'),10));
+      });
+    });
+    host.querySelectorAll('[data-open-cal]').forEach(function(el){
+      el.addEventListener('click', function(){ openCalendarModal(el.getAttribute('data-open-cal')); });
+    });
+    host.querySelectorAll('[data-open-qr]').forEach(function(btn){
+      btn.addEventListener('click', function(ev){ ev.stopPropagation(); openQrModal(btn.getAttribute('data-open-qr')); });
+    });
+    host.querySelectorAll('[data-edit]').forEach(function(btn){
+      btn.addEventListener('click', function(ev){
+        ev.stopPropagation();
+        var emp = state.employees.find(function(x){return x.id===btn.getAttribute('data-edit');});
+        if(emp) openEmployeeModal(emp);
+      });
+    });
+    host.querySelectorAll('[data-del]').forEach(function(btn){
+      btn.addEventListener('click', function(ev){
+        ev.stopPropagation();
+        var id = btn.getAttribute('data-del');
+        var emp = state.employees.find(function(x){return x.id===id;});
+        if(confirm('Remove ' + (emp?emp.name:'this employee') + ' from the roster?\n(Attendance history will be kept but hidden.)')){
+          state.employees = state.employees.filter(function(x){return x.id!==id;});
+          saveEmployees();
+          renderAll(true);
+          toast('Employee removed');
+        }
+      });
+    });
+  }
+
+  function renderAll(refreshFilters){
+    renderMonthLabel();
+    if(refreshFilters) renderFilterOptions();
+    renderSummaryStrip();
+    renderTable();
+  }
+
+  /* ---------------- Modals ---------------- */
+  function openModal(html, wide){
+    var ov = document.createElement('div');
+    ov.className = 'overlay';
+    ov.id = 'activeOverlay';
+    ov.innerHTML = '<div class="modal'+(wide?' wide':'')+'">'+html+'</div>';
+    document.body.appendChild(ov);
+    ov.addEventListener('click', function(e){ if(e.target === ov) closeModal(); });
+    return ov;
+  }
+  function closeModal(){ var ov = document.getElementById('activeOverlay'); if(ov) ov.remove(); }
+
+  function openAddModal(){ openEmployeeModal(null); }
+
+  function openEmployeeModal(existing){
+    var isEdit = !!existing;
+    var depts = departmentList();
+    var pendingPhoto = isEdit ? (existing.photo || '') : '';
+    var html = ''+
+      '<button class="close-x" id="mClose">✕</button>'+
+      '<h2>'+(isEdit ? 'Edit employee' : 'Add employee')+'</h2>'+
+      '<p class="sub">'+(isEdit ? 'Update details for '+escapeHtml(existing.name)+'.' : 'They will be added to the current roster of '+state.employees.length+'.')+'</p>'+
+      '<div class="field"><label>Photo</label><div class="photo-upload-row">'+
+        '<div id="fPhotoPreview">'+(pendingPhoto ? '<img class="avatar lg" src="'+pendingPhoto+'" alt="">' : '<div class="avatar lg">'+(isEdit?initials(existing.name):'?')+'</div>')+'</div>'+
+        '<div class="photo-upload-actions"><input type="file" id="fPhoto" accept="image/*">'+
+        '<button type="button" class="photo-remove-link" id="fPhotoRemove" style="'+(pendingPhoto?'':'display:none;')+'">Remove photo</button></div>'+
+      '</div></div>'+
+      '<div class="field"><label>Staff ID</label><input type="text" id="fSid" value="'+escapeHtml(isEdit?existing.staffId:nextStaffId())+'"></div>'+
+      '<div class="field"><label>Full name</label><input type="text" id="fName" placeholder="e.g. Priya Sharma" value="'+(isEdit?escapeHtml(existing.name):'')+'"></div>'+
+      '<div class="field"><label>Department</label><input type="text" id="fDept" list="deptList" placeholder="e.g. Production" value="'+(isEdit?escapeHtml(existing.dept||''):'')+'"><datalist id="deptList">'+
+        depts.map(function(d){return '<option value="'+escapeHtml(d)+'">';}).join('')+'</datalist></div>'+
+      '<div class="field"><label>Gender</label><div class="radio-row">'+
+        '<label><input type="radio" name="fGender" value="M"'+(!isEdit||existing.gender==='M'?' checked':'')+'> Male</label>'+
+        '<label><input type="radio" name="fGender" value="F"'+(isEdit&&existing.gender==='F'?' checked':'')+'> Female</label></div></div>'+
+      '<div class="modal-actions"><button class="btn" id="mCancel">Cancel</button><button class="btn primary" id="mSave">'+(isEdit?'Save changes':'Add employee')+'</button></div>';
+    var ov = openModal(html);
+    ov.querySelector('#mClose').onclick = closeModal;
+    ov.querySelector('#mCancel').onclick = closeModal;
+    ov.querySelector('#fName').focus();
+    ov.querySelector('#fPhoto').addEventListener('change', function(ev){
+      var file = ev.target.files && ev.target.files[0];
+      if(!file) return;
+      resizeImageFile(file, 160, 0.62).then(function(dataUrl){
+        pendingPhoto = dataUrl;
+        ov.querySelector('#fPhotoPreview').innerHTML = '<img class="avatar lg" src="'+dataUrl+'" alt="">';
+        ov.querySelector('#fPhotoRemove').style.display = '';
+      }).catch(function(){ toast('Could not read that image'); });
+    });
+    ov.querySelector('#fPhotoRemove').onclick = function(){
+      pendingPhoto = '';
+      var nm = ov.querySelector('#fName').value.trim() || (isEdit?existing.name:'');
+      ov.querySelector('#fPhotoPreview').innerHTML = '<div class="avatar lg">'+initials(nm)+'</div>';
+      ov.querySelector('#fPhotoRemove').style.display = 'none';
+      ov.querySelector('#fPhoto').value = '';
+    };
+    ov.querySelector('#mSave').onclick = function(){
+      var sid = ov.querySelector('#fSid').value.trim();
+      var name = ov.querySelector('#fName').value.trim();
+      var dept = ov.querySelector('#fDept').value.trim();
+      var gender = ov.querySelector('input[name=fGender]:checked').value;
+      if(!name){ toast('Enter a name first'); return; }
+      if(!sid){ toast('Enter a staff ID'); return; }
+      var clash = state.employees.some(function(e){
+        return (e.staffId||'').toLowerCase()===sid.toLowerCase() && (!isEdit || e.id!==existing.id);
+      });
+      if(clash){ toast('That staff ID is already used'); return; }
+      if(isEdit){
+        existing.staffId = sid; existing.name = name; existing.dept = dept; existing.gender = gender; existing.photo = pendingPhoto;
+      } else {
+        state.employees.push({id:uid(), staffId:sid, name:name, dept:dept, gender:gender, photo:pendingPhoto});
+      }
+      saveEmployees();
+      closeModal();
+      renderAll(true);
+      toast(isEdit ? 'Saved changes' : 'Added ' + name);
+    };
+  }
+
+  function openBulkModal(){
+    var html = ''+
+      '<button class="close-x" id="mClose">✕</button>'+
+      '<h2>Bulk import employees</h2>'+
+      '<p class="sub">One employee per line: <b>StaffID, Name, Department, Gender(M/F)</b>. Paste up to your full team of 200.</p>'+
+      '<div class="field"><textarea id="fBulk" style="min-height:150px;font-family:var(--mono);font-size:12.5px;" placeholder="STF0001, Priya Sharma, Production, F\nSTF0002, Rahul Verma, Quality, M\nSTF0003, Anita Rao, HR, F"></textarea></div>'+
+      '<div class="modal-actions"><button class="btn" id="mCancel">Cancel</button><button class="btn primary" id="mSave">Import</button></div>';
+    var ov = openModal(html);
+    ov.querySelector('#mClose').onclick = closeModal;
+    ov.querySelector('#mCancel').onclick = closeModal;
+    ov.querySelector('#mSave').onclick = function(){
+      var raw = ov.querySelector('#fBulk').value;
+      var lines = raw.split('\n').map(function(l){return l.trim();}).filter(Boolean);
+      var added = 0, seq = 0;
+      var existingIds = {};
+      state.employees.forEach(function(e){ existingIds[(e.staffId||'').toLowerCase()] = true; });
+      lines.forEach(function(line){
+        var parts = line.split(',').map(function(p){return p.trim();});
+        if(!parts[0]) return;
+        var sid, name, dept, genderRaw;
+        if(parts.length >= 4){ sid = parts[0]; name = parts[1]; dept = parts[2]; genderRaw = parts[3]; }
+        else { name = parts[0]; dept = parts[1]||''; genderRaw = parts[2]||'M'; sid = null; }
+        if(!name) return;
+        if(!sid){ do{ seq++; sid = nextStaffId().replace(/\d+$/, function(m){return String(parseInt(m,10)+seq-1).padStart(4,'0');}); } while(existingIds[sid.toLowerCase()]); }
+        if(existingIds[sid.toLowerCase()]) return;
+        existingIds[sid.toLowerCase()] = true;
+        var gender = (genderRaw||'M').toUpperCase().indexOf('F')===0 ? 'F' : 'M';
+        state.employees.push({id:uid(), staffId:sid, name:name, dept:dept, gender:gender});
+        added++;
+      });
+      if(added === 0){ toast('No valid rows found'); return; }
+      saveEmployees();
+      closeModal();
+      renderAll(true);
+      toast('Imported ' + added + ' employees');
+    };
+  }
+
+  function openDeptModal(){
+    var html = ''+
+      '<button class="close-x" id="mClose">✕</button>'+
+      '<h2>Manage departments</h2>'+
+      '<p class="sub">Rename or remove departments. Renaming updates every employee currently in that department.</p>'+
+      '<div class="field-row"><div class="field" style="margin-bottom:0;"><input type="text" id="fNewDept" placeholder="New department name"></div>'+
+        '<button class="btn primary" id="mAddDept" style="align-self:flex-start;">Add</button></div>'+
+      '<div id="deptListHost" style="margin-top:16px;"></div>'+
+      '<div class="modal-actions"><button class="btn" id="mDone">Done</button></div>';
+    var ov = openModal(html);
+    ov.querySelector('#mClose').onclick = closeModal;
+    ov.querySelector('#mDone').onclick = closeModal;
+    ov.querySelector('#mAddDept').onclick = function(){
+      var name = ov.querySelector('#fNewDept').value.trim();
+      if(!name){ toast('Enter a department name'); return; }
+      if(departmentList().some(function(d){return d.toLowerCase()===name.toLowerCase();})){ toast('That department already exists'); return; }
+      state.departments.push(name);
+      saveDepartments();
+      ov.querySelector('#fNewDept').value = '';
+      renderDeptList(ov);
+      renderFilterOptions();
+      toast('Department added');
+    };
+    renderDeptList(ov);
+  }
+
+  function renderDeptList(ov){
+    var host = ov.querySelector('#deptListHost');
+    var depts = departmentList();
+    if(depts.length === 0){
+      host.innerHTML = '<p class="sub" style="margin:0;">No departments yet — add one above.</p>';
+      return;
+    }
+    host.innerHTML = depts.map(function(d){
+      var count = state.employees.filter(function(e){return e.dept===d;}).length;
+      return '<div class="kiosk-match" style="background:var(--paper);border:1px solid var(--line);color:var(--ink);margin-bottom:8px;">'+
+        '<div><div class="nm" style="color:var(--ink);">'+escapeHtml(d)+'</div><div class="idn" style="color:var(--ink-soft);">'+count+' employee'+(count===1?'':'s')+'</div></div>'+
+        '<div style="display:flex;gap:6px;"><button class="btn small" data-rename="'+escapeHtml(d)+'">Rename</button>'+
+        '<button class="btn small danger" data-remove="'+escapeHtml(d)+'">Remove</button></div></div>';
+    }).join('');
+    host.querySelectorAll('[data-rename]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var oldName = btn.getAttribute('data-rename');
+        var newName = prompt('Rename department "'+oldName+'" to:', oldName);
+        if(!newName) return;
+        newName = newName.trim();
+        if(!newName || newName === oldName) return;
+        if(departmentList().some(function(d){return d.toLowerCase()===newName.toLowerCase() && d!==oldName;})){
+          toast('That department already exists'); return;
+        }
+        state.departments = state.departments.map(function(d){return d===oldName?newName:d;});
+        if(!state.departments.includes(newName)) state.departments.push(newName);
+        state.employees.forEach(function(e){ if(e.dept===oldName) e.dept = newName; });
+        saveDepartments(); saveEmployees();
+        renderDeptList(ov);
+        renderAll(true);
+        toast('Department renamed');
+      });
+    });
+    host.querySelectorAll('[data-remove]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var name = btn.getAttribute('data-remove');
+        var count = state.employees.filter(function(e){return e.dept===name;}).length;
+        var msg = count>0 ? ('Remove "'+name+'"? '+count+' employee'+(count===1?'':'s')+' will be set to no department.') : ('Remove "'+name+'"?');
+        if(!confirm(msg)) return;
+        state.departments = state.departments.filter(function(d){return d!==name;});
+        state.employees.forEach(function(e){ if(e.dept===name) e.dept = ''; });
+        saveDepartments(); saveEmployees();
+        renderDeptList(ov);
+        renderAll(true);
+        toast('Department removed');
+      });
+    });
+  }
+
+  function openDayEditor(empId, day){
+    var emp = state.employees.find(function(x){return x.id===empId;});
+    if(!emp) return;
+    var rec = getRecord(empId, day);
+    var months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    var opts = STATUS.map(function(s){
+      return '<option value="'+s.code+'"'+(rec.c===s.code?' selected':'')+'>'+(s.code?s.code+' — ':'')+s.label+'</option>';
+    }).join('');
+    var timeLine = (rec.inT || rec.outT) ? ('<div class="field"><label>Gate check-in / check-out</label>'+
+      '<div style="font-family:var(--mono);font-size:13px;color:var(--ink-soft);">'+
+      (rec.inT?('In: '+rec.inT+'  '):'')+(rec.outT?('Out: '+rec.outT):'')+'</div></div>') : '';
+    var html = ''+
+      '<button class="close-x" id="mClose">✕</button>'+
+      '<h2>'+escapeHtml(emp.name)+'</h2>'+
+      '<p class="sub">'+escapeHtml(emp.staffId||'')+' · '+months[state.current.getMonth()]+' '+day+', '+state.current.getFullYear()+'</p>'+
+      '<div class="field"><label>Duty</label><select id="fDuty">'+opts+'</select></div>'+
+      timeLine+
+      '<div class="field"><label>Remarks (optional)</label><textarea id="fRemark" placeholder="e.g. Sick leave with medical certificate">'+escapeHtml(rec.r||'')+'</textarea></div>'+
+      '<div class="modal-actions"><button class="btn" id="mClear">Clear day</button><button class="btn" id="mCancel">Cancel</button><button class="btn primary" id="mSave">Save</button></div>';
+    var ov = openModal(html);
+    ov.querySelector('#mClose').onclick = closeModal;
+    ov.querySelector('#mCancel').onclick = closeModal;
+    ov.querySelector('#mClear').onclick = function(){
+      setRecord(empId, day, {c:'', r:'', inT:'', outT:''});
+      closeModal(); renderAll(false);
+    };
+    ov.querySelector('#mSave').onclick = function(){
+      var duty = ov.querySelector('#fDuty').value;
+      var remark = ov.querySelector('#fRemark').value.trim();
+      setRecord(empId, day, {c:duty, r:remark});
+      closeModal(); renderAll(false);
+    };
+  }
+
+  function openCalendarModal(empId){
+    var emp = state.employees.find(function(x){return x.id===empId;});
+    if(!emp) return;
+    state.modalCalEmpId = empId;
+    renderCalendarModalContent();
+  }
+
+  function renderCalendarModalContent(){
+    var empId = state.modalCalEmpId;
+    var emp = state.employees.find(function(x){return x.id===empId;});
+    if(!emp) return;
+    var year = state.current.getFullYear(), month = state.current.getMonth();
+    var dim = daysInMonth(state.current);
+    var firstDow = new Date(year, month, 1).getDay();
+    var totals = computeTotals(empId);
+    var months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+    var grid = DOW.map(function(d){return '<div class="cal-dow">'+d+'</div>';}).join('');
+    for(var i=0;i<firstDow;i++){ grid += '<div class="cal-cell blank"></div>'; }
+    for(var d=1; d<=dim; d++){
+      var rec = getRecord(empId, d);
+      grid += '<div class="cal-cell '+(rec.c?'st-'+rec.c:'')+'" data-cal-day="'+d+'">'+d+(rec.c?'<span class="code">'+rec.c+'</span>':'')+(rec.r?'<span class="rmk-dot"></span>':'')+'</div>';
+    }
+
+    var html = ''+
+      '<button class="close-x" id="mClose">✕</button>'+
+      '<div class="cal-emp-head">'+avatarHtml(emp,'lg')+'<div><h2 style="margin-bottom:2px;">'+escapeHtml(emp.name)+
+        '<span class="gender-tag '+emp.gender+'">'+emp.gender+'</span></h2>'+
+        '<p class="sub" style="margin:0;">'+escapeHtml(emp.staffId||'')+' · '+escapeHtml(emp.dept||'—')+' · '+months[month]+' '+year+'</p></div></div>'+
+      '<div class="cal-grid">'+grid+'</div>'+
+      '<p class="cal-legend-hint">Click any date to choose a duty and add remarks</p>'+
+      '<div class="cal-summary">'+
+        TOTAL_CODES.map(function(code){
+          var s = STATUS.find(function(x){return x.code===code;});
+          return '<span class="pill"><span class="swatch" style="background:'+s.bg+';border:1px solid '+s.fg+'"></span>'+code+': '+totals[code]+'</span>';
+        }).join('') +
+        '<span class="pill" style="background:var(--amber-soft);color:var(--amber);">Payable days: '+(totals.payable%1===0?totals.payable:totals.payable.toFixed(1))+'</span>'+
+      '</div>';
+
+    var existing = document.getElementById('activeOverlay');
+    var ov;
+    if(existing){ existing.querySelector('.modal').innerHTML = html; ov = existing; }
+    else { ov = openModal(html, true); }
+
+    ov.querySelector('#mClose').onclick = function(){ state.modalCalEmpId = null; closeModal(); };
+    ov.querySelectorAll('[data-cal-day]').forEach(function(cell){
+      cell.addEventListener('click', function(){
+        openDayEditorFromCalendar(empId, parseInt(cell.getAttribute('data-cal-day'),10));
+      });
+    });
+  }
+
+  function openDayEditorFromCalendar(empId, day){
+    // reuse the same editor; after save, refresh the calendar modal instead of closing to admin table
+    var emp = state.employees.find(function(x){return x.id===empId;});
+    if(!emp) return;
+    var rec = getRecord(empId, day);
+    var months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    var opts = STATUS.map(function(s){
+      return '<option value="'+s.code+'"'+(rec.c===s.code?' selected':'')+'>'+(s.code?s.code+' — ':'')+s.label+'</option>';
+    }).join('');
+    var timeLine = (rec.inT || rec.outT) ? ('<div class="field"><label>Gate check-in / check-out</label>'+
+      '<div style="font-family:var(--mono);font-size:13px;color:var(--ink-soft);">'+
+      (rec.inT?('In: '+rec.inT+'  '):'')+(rec.outT?('Out: '+rec.outT):'')+'</div></div>') : '';
+    var html = ''+
+      '<button class="close-x" id="mClose">✕</button>'+
+      '<h2>'+escapeHtml(emp.name)+'</h2>'+
+      '<p class="sub">'+escapeHtml(emp.staffId||'')+' · '+months[state.current.getMonth()]+' '+day+', '+state.current.getFullYear()+'</p>'+
+      '<div class="field"><label>Duty</label><select id="fDuty">'+opts+'</select></div>'+
+      timeLine+
+      '<div class="field"><label>Remarks (optional)</label><textarea id="fRemark" placeholder="e.g. Sick leave with medical certificate">'+escapeHtml(rec.r||'')+'</textarea></div>'+
+      '<div class="modal-actions"><button class="btn" id="mClear">Clear day</button><button class="btn" id="mCancel">Back</button><button class="btn primary" id="mSave">Save</button></div>';
+    var ov = document.getElementById('activeOverlay');
+    ov.querySelector('.modal').innerHTML = html;
+    ov.querySelector('#mClose').onclick = function(){ state.modalCalEmpId = null; closeModal(); renderAll(false); };
+    ov.querySelector('#mCancel').onclick = function(){ renderCalendarModalContent(); };
+    ov.querySelector('#mClear').onclick = function(){ setRecord(empId, day, {c:'', r:'', inT:'', outT:''}); renderCalendarModalContent(); renderTable(); renderSummaryStrip(); };
+    ov.querySelector('#mSave').onclick = function(){
+      var duty = ov.querySelector('#fDuty').value;
+      var remark = ov.querySelector('#fRemark').value.trim();
+      setRecord(empId, day, {c:duty, r:remark});
+      renderCalendarModalContent(); renderTable(); renderSummaryStrip();
+    };
+  }
+
+  function openStaffLinkModal(){
+    var base = location.href.split('#')[0].split('?')[0];
+    var link = base + '#kiosk';
+    var isPortable = location.protocol === 'file:' || location.protocol === 'blob:' || location.protocol === 'about:' || location.hostname === '';
+    var warn = isPortable ? (
+      '<p class="sub" style="color:var(--a);">This page isn\'t on a public web address yet (it\'s running as a preview/local file), so this exact link '+
+      'will only work on this device. To share a link every staff member\'s phone can open, upload this HTML file to a host '+
+      '(your company server, GitHub Pages, Netlify Drop, etc.) and then share <b>that</b> address with <code>#kiosk</code> added to the end.</p>'
+    ) : (
+      '<p class="sub">Share this link or print the QR code at the main gate. It opens straight into check-in/out — no admin access, no roster editing.</p>'
+    );
+    var html = ''+
+      '<button class="close-x" id="mClose">✕</button>'+
+      '<h2>Staff check-in link</h2>'+
+      warn+
+      '<div class="field"><label>Link</label><input type="text" id="fLink" readonly value="'+escapeHtml(link)+'" onclick="this.select()"></div>'+
+      '<div class="qr-card"><div id="staffQrHost"></div></div>'+
+      '<div class="modal-actions"><button class="btn" id="mCopy">Copy link</button><button class="btn primary" id="mPrintQr">Print QR</button></div>';
+    var ov = openModal(html);
+    ov.querySelector('#mClose').onclick = closeModal;
+    var qrHost = ov.querySelector('#staffQrHost');
+    try{ new QRCode(qrHost, {text: link, width:180, height:180, colorDark:'#171c2e', colorLight:'#ffffff'}); }
+    catch(e){ qrHost.innerHTML = ''; }
+    ov.querySelector('#mCopy').onclick = function(){
+      var input = ov.querySelector('#fLink');
+      input.select();
+      try{
+        navigator.clipboard.writeText(link).then(function(){ toast('Link copied'); }).catch(function(){ document.execCommand('copy'); toast('Link copied'); });
+      }catch(e){ document.execCommand('copy'); toast('Link copied'); }
+    };
+    ov.querySelector('#mPrintQr').onclick = function(){
+      var w = window.open('', '_blank');
+      w.document.write('<html><head><title>Gate Check-in QR</title></head><body style="font-family:sans-serif;text-align:center;padding:40px;">'+
+        '<h2>Scan to check in / check out</h2><div>'+qrHost.innerHTML+'</div><p style="font-family:monospace;">'+escapeHtml(link)+'</p></body></html>');
+      w.document.close();
+      setTimeout(function(){ w.print(); }, 300);
+    };
+  }
+
+  function openQrModal(empId){
+    var emp = state.employees.find(function(x){return x.id===empId;});
+    if(!emp) return;
+    var html = ''+
+      '<button class="close-x" id="mClose">✕</button>'+
+      '<div class="qr-card">'+
+      '<h2 style="margin-bottom:0;">Gate ID card</h2>'+
+      '<p class="sub">Print this and give it to the employee, or let them save it on their phone.</p>'+
+      '<div style="display:flex;justify-content:center;margin-top:6px;">'+avatarHtml(emp,'xl')+'</div>'+
+      '<div id="qrCanvasHost"></div>'+
+      '<div class="idcard-name">'+escapeHtml(emp.name)+'</div>'+
+      '<div class="idcard-meta">'+escapeHtml(emp.dept||'—')+' · '+ (emp.gender==='M'?'Male':'Female') +'</div>'+
+      '<div class="idcard-id">'+escapeHtml(emp.staffId||'')+'</div>'+
+      '</div>'+
+      '<div class="modal-actions"><button class="btn" id="mClose2">Close</button><button class="btn primary" id="mPrint">Print card</button></div>';
+    var ov = openModal(html);
+    ov.querySelector('#mClose').onclick = closeModal;
+    ov.querySelector('#mClose2').onclick = closeModal;
+    var host = ov.querySelector('#qrCanvasHost');
+    try{
+      new QRCode(host, {text: emp.staffId || emp.id, width:180, height:180, colorDark:'#171c2e', colorLight:'#ffffff'});
+    }catch(e){ host.innerHTML = '<p style="color:var(--a)">QR library unavailable — staff ID: '+escapeHtml(emp.staffId||'')+'</p>'; }
+    ov.querySelector('#mPrint').onclick = function(){
+      var w = window.open('', '_blank');
+      var photoImg = emp.photo ? '<img src="'+emp.photo+'" style="width:90px;height:90px;border-radius:50%;object-fit:cover;margin-bottom:8px;">' : '';
+      w.document.write('<html><head><title>ID Card - '+escapeHtml(emp.name)+'</title></head><body style="font-family:sans-serif;text-align:center;padding:40px;">'+
+        '<div>'+photoImg+'</div><div>'+host.innerHTML+'</div><h2>'+escapeHtml(emp.name)+'</h2><p>'+escapeHtml(emp.dept||'')+'</p><p style="font-family:monospace;font-weight:bold;">'+escapeHtml(emp.staffId||'')+'</p></body></html>');
+      w.document.close();
+      setTimeout(function(){ w.print(); }, 300);
+    };
+  }
+
+  /* ---------------- CSV export ---------------- */
+  function exportCsv(){
+    var list = filteredEmployees();
+    var months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    var rows = [['Sr','StaffID','Name','Department','Gender','Present','NightShift','Absent','WeekOff','Holiday','HalfDay','PaidLeave','PayableDays','Month']];
+    list.forEach(function(e, idx){
+      var t = computeTotals(e.id);
+      rows.push([idx+1, e.staffId, e.name, e.dept, e.gender, t.P, t.N, t.A, t.WO, t.H, t.HD, t.PL, (t.payable%1===0?t.payable:t.payable.toFixed(1)), months[state.current.getMonth()]+' '+state.current.getFullYear()]);
+    });
+    var csv = rows.map(function(r){
+      return r.map(function(v){
+        v = String(v==null?'':v);
+        if(v.indexOf(',')>-1 || v.indexOf('"')>-1){ v = '"'+v.replace(/"/g,'""')+'"'; }
+        return v;
+      }).join(',');
+    }).join('\n');
+    var blob = new Blob([csv], {type:'text/csv'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'salary-attendance-report-' + monthKey(state.current) + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    toast('Report downloaded');
+  }
+
+  /* ---------------- Kiosk (main-gate QR check-in/out) ---------------- */
+  function enterKiosk(locked){
+    state.view = 'kiosk';
+    state.kioskLocked = !!locked;
+    document.getElementById('app').style.display = 'none';
+    var host = document.createElement('div');
+    host.id = 'kioskHost';
+    document.body.appendChild(host);
+    renderKiosk();
+    if(FIREBASE_READY){
+      state.kioskRefreshTimer = setInterval(function(){ loadEmployees(); }, 45000);
     }
   }
-}
+  function exitKiosk(){
+    stopKioskCamera();
+    if(state.kioskRefreshTimer){ clearInterval(state.kioskRefreshTimer); state.kioskRefreshTimer = null; }
+    var host = document.getElementById('kioskHost');
+    if(host) host.remove();
+    document.getElementById('app').style.display = 'block';
+    state.view = 'admin';
+  }
+
+  function renderKiosk(){
+    var host = document.getElementById('kioskHost');
+    host.innerHTML = ''+
+      '<div class="kiosk-flash" id="kioskFlash"></div>'+
+      '<div class="kiosk">'+
+        (state.kioskLocked ? '' : '<button class="kiosk-exit" id="kExit">← Back to admin console</button>')+
+        '<div class="kiosk-title">Main Gate Attendance</div>'+
+        '<div class="kiosk-sub">Scan your ID card QR code to check in or check out</div>'+
+        '<div class="kiosk-cam-wrap"><video id="kVideo" playsinline muted></video></div>'+
+        '<canvas id="kCanvas" style="display:none;"></canvas>'+
+        '<div class="kiosk-status" id="kStatus">Starting camera…</div>'+
+        '<div id="kResultHost"></div>'+
+        '<details class="kiosk-manual">'+
+          '<summary>No camera? Check in manually</summary>'+
+          '<input type="text" id="kManualSearch" placeholder="Type staff ID or name…">'+
+          '<div id="kManualResults"></div>'+
+        '</details>'+
+      '</div>';
+    if(!state.kioskLocked){ document.getElementById('kExit').onclick = exitKiosk; }
+    document.getElementById('kManualSearch').addEventListener('input', renderManualMatches);
+    startKioskCamera();
+  }
+
+  function renderManualMatches(){
+    var q = document.getElementById('kManualSearch').value.trim().toLowerCase();
+    var host = document.getElementById('kManualResults');
+    if(!q){ host.innerHTML=''; return; }
+    var matches = state.employees.filter(function(e){
+      return e.name.toLowerCase().indexOf(q)>-1 || (e.staffId||'').toLowerCase().indexOf(q)>-1;
+    }).slice(0,6);
+    host.innerHTML = matches.map(function(e){
+      return '<div class="kiosk-match"><div><div class="nm">'+escapeHtml(e.name)+'</div><div class="idn">'+escapeHtml(e.staffId||'')+'</div></div>'+
+        '<button data-manual="'+e.id+'">Check In/Out</button></div>';
+    }).join('') || '<p style="color:#9aa2bd;font-size:12px;">No matches</p>';
+    host.querySelectorAll('[data-manual]').forEach(function(btn){
+      btn.addEventListener('click', function(){ processScan(state.employees.find(function(e){return e.id===btn.getAttribute('data-manual');}).staffId); });
+    });
+  }
+
+  async function startKioskCamera(){
+    var statusEl = document.getElementById('kStatus');
+    try{
+      var stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+      state.kioskStream = stream;
+      var video = document.getElementById('kVideo');
+      video.srcObject = stream;
+      await video.play();
+      statusEl.textContent = 'Point your ID QR code at the camera';
+      statusEl.className = 'kiosk-status';
+      scanLoop();
+    }catch(e){
+      statusEl.textContent = 'Camera unavailable — use manual check-in below';
+      statusEl.className = 'kiosk-status err';
+    }
+  }
+  function stopKioskCamera(){
+    if(state.kioskRAF) cancelAnimationFrame(state.kioskRAF);
+    if(state.kioskStream){ state.kioskStream.getTracks().forEach(function(t){t.stop();}); state.kioskStream = null; }
+  }
+  function scanLoop(){
+    if(state.view !== 'kiosk') return;
+    var video = document.getElementById('kVideo');
+    var canvas = document.getElementById('kCanvas');
+    if(video && video.readyState === video.HAVE_ENOUGH_DATA && typeof jsQR === 'function'){
+      canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+      var ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      var img = ctx.getImageData(0,0,canvas.width,canvas.height);
+      var code = jsQR(img.data, img.width, img.height);
+      if(code && code.data && Date.now() > state.kioskBusyUntil){
+        processScan(code.data.trim());
+      }
+    }
+    state.kioskRAF = requestAnimationFrame(scanLoop);
+  }
+
+  async function processScan(rawId){
+    var statusEl = document.getElementById('kStatus');
+    var emp = state.employees.find(function(e){ return (e.staffId||'').toLowerCase() === String(rawId).toLowerCase() || e.id === rawId; });
+    var flash = document.getElementById('kioskFlash');
+    if(flash){ flash.classList.add('on'); setTimeout(function(){flash.classList.remove('on');}, 150); }
+    if(!emp){
+      if(statusEl){ statusEl.textContent = 'Unrecognized ID card'; statusEl.className='kiosk-status err'; }
+      state.kioskBusyUntil = Date.now() + 1500;
+      return;
+    }
+    state.kioskBusyUntil = Date.now() + 4000;
+    var now = new Date();
+    var mk = monthKey(now);
+    var day = now.getDate();
+    await loadAttendanceForMonth(mk);
+    var rec = getRecord(emp.id, day, mk);
+    var action;
+    if(rec.lastAction === 'in'){
+      action = 'out';
+      setRecord(emp.id, day, {outT: timeNow(), lastAction:'out'}, mk);
+    } else {
+      action = 'in';
+      var duty = isNightHour(now) ? 'N' : 'P';
+      setRecord(emp.id, day, {c: duty, inT: timeNow(), outT:'', lastAction:'in'}, mk);
+    }
+    if(statusEl){ statusEl.textContent = 'Welcome, ' + emp.name; statusEl.className='kiosk-status ok'; }
+    var rh = document.getElementById('kResultHost');
+    if(rh){
+      rh.innerHTML = '<div class="kiosk-result">'+avatarHtml(emp,'lg')+
+        '<div class="r-name" style="margin-top:8px;">'+escapeHtml(emp.name)+'</div>'+
+        '<div class="r-id">'+escapeHtml(emp.staffId||'')+' · '+escapeHtml(emp.dept||'')+'</div>'+
+        '<div class="r-action '+action+'">'+(action==='in'?'Checked In · '+timeNow():'Checked Out · '+timeNow())+'</div></div>';
+    }
+    if(monthKey(state.current) === mk){ renderAll(false); }
+  }
+
+  /* ---------------- Wiring ---------------- */
+  async function switchMonth(delta){
+    state.current = new Date(state.current.getFullYear(), state.current.getMonth()+delta, 1);
+    await loadAttendanceForMonth(monthKey(state.current));
+    renderAll(false);
+  }
+
+  document.getElementById('prevMonth').onclick = function(){ switchMonth(-1); };
+  document.getElementById('nextMonth').onclick = function(){ switchMonth(1); };
+  document.getElementById('btnAdd').onclick = openAddModal;
+  document.getElementById('btnBulk').onclick = openBulkModal;
+  document.getElementById('btnDepts').onclick = openDeptModal;
+  document.getElementById('btnExport').onclick = exportCsv;
+  document.getElementById('btnKiosk').onclick = function(){ enterKiosk(false); };
+  document.getElementById('btnStaffLink').onclick = openStaffLinkModal;
+  document.getElementById('btnLock').onclick = function(){
+    sessionStorage.removeItem(UNLOCK_FLAG);
+    location.reload();
+  };
+  document.getElementById('searchBox').addEventListener('input', function(e){
+    state.filters.search = e.target.value; renderTable(); renderSummaryStrip();
+  });
+  document.getElementById('deptFilter').addEventListener('change', function(e){
+    state.filters.dept = e.target.value; renderTable(); renderSummaryStrip();
+  });
+  document.getElementById('genderFilter').addEventListener('change', function(e){
+    state.filters.gender = e.target.value; renderTable(); renderSummaryStrip();
+  });
+
+  function renderStorageBadge(){
+    var el = document.getElementById('storageBadge');
+    if(!el) return;
+    el.textContent = FIREBASE_READY
+      ? '☁ Live-synced via Firebase — every device sees the same data'
+      : (HAS_CLOUD
+        ? '☁ Synced — visible on every device that opens this page'
+        : '💾 Saved in this browser only — same device & browser will keep your data');
+  }
+
+  var ADMIN_PASS_KEY = 'att_admin_pass_hash';
+  var UNLOCK_FLAG = 'att_admin_unlocked';
+
+  async function sha256(str){
+    try{
+      if(window.crypto && window.crypto.subtle){
+        var enc = new TextEncoder().encode(str);
+        var buf = await crypto.subtle.digest('SHA-256', enc);
+        return Array.from(new Uint8Array(buf)).map(function(b){ return b.toString(16).padStart(2,'0'); }).join('');
+      }
+    }catch(e){}
+    // Fallback for non-HTTPS/local contexts where SubtleCrypto is unavailable.
+    var h = 0;
+    for(var i=0;i<str.length;i++){ h = ((h<<5)-h+str.charCodeAt(i))|0; }
+    return 'fb' + Math.abs(h).toString(16) + str.length;
+  }
+
+  function isKioskLink(){
+    return location.hash === '#kiosk' || location.hash === '#checkin' || /[?&]kiosk=1/.test(location.search);
+  }
+
+  async function initAdmin(){
+    document.getElementById('app').style.display = 'block';
+    renderLegend();
+    renderStorageBadge();
+    await loadDepartments();
+    await loadAttendanceForMonth(monthKey(state.current));
+    renderAll(true);
+  }
+
+  function showLockScreen(storedHash){
+    var host = document.createElement('div');
+    host.id = 'lockHost';
+    document.body.appendChild(host);
+    var isSetup = !storedHash;
+    function draw(errorMsg){
+      host.innerHTML = ''+
+        '<div class="kiosk" style="justify-content:center;">'+
+          '<div style="font-size:38px;">🔒</div>'+
+          '<div class="kiosk-title">'+(isSetup ? 'Set an admin password' : 'Admin login')+'</div>'+
+          '<div class="kiosk-sub">'+(isSetup ? 'This protects the roster, attendance and settings on this device/link.' : 'Enter the password to open the admin console.')+'</div>'+
+          '<div class="kiosk-manual" style="display:block;max-width:300px;">'+
+            '<input type="password" id="lPass" placeholder="Password" autocomplete="new-password" style="margin-bottom:10px;">'+
+            (isSetup ? '<input type="password" id="lPass2" placeholder="Confirm password" style="margin-bottom:10px;">' : '')+
+            (errorMsg ? '<div style="color:#ff9b93;font-size:12.5px;margin-bottom:10px;">'+escapeHtml(errorMsg)+'</div>' : '')+
+            '<button class="btn primary" id="lGo" style="width:100%;">'+(isSetup?'Set password':'Unlock')+'</button>'+
+            (isSetup ? '' : '<div style="text-align:center;margin-top:14px;"><button class="photo-remove-link" id="lReset" style="color:#9aa2bd;">Forgot password? Reset it</button></div>')+
+          '</div>'+
+        '</div>';
+      host.querySelector('#lPass').focus();
+      host.querySelector('#lGo').onclick = submit;
+      host.querySelector('#lPass').addEventListener('keydown', function(e){ if(e.key==='Enter') submit(); });
+      if(!isSetup){
+        var pass2 = host.querySelector('#lPass2');
+        if(pass2) pass2.addEventListener('keydown', function(e){ if(e.key==='Enter') submit(); });
+        host.querySelector('#lReset').onclick = async function(){
+          if(!confirm('This removes the current admin password so a new one can be set. Anyone with access to this page could do this, so only use it if you\'re genuinely locked out. Continue?')) return;
+          await storageSet(ADMIN_PASS_KEY, '');
+          isSetup = true;
+          draw();
+        };
+      }
+    }
+    async function submit(){
+      var pw = host.querySelector('#lPass').value;
+      if(isSetup){
+        var pw2 = host.querySelector('#lPass2').value;
+        if(!pw || pw.length < 4){ draw('Use at least 4 characters'); return; }
+        if(pw !== pw2){ draw('Passwords do not match'); return; }
+        var hash = await sha256(pw);
+        await storageSet(ADMIN_PASS_KEY, hash);
+        sessionStorage.setItem(UNLOCK_FLAG, '1');
+        host.remove();
+        toast('Admin password set');
+        initAdmin();
+      } else {
+        var hash2 = await sha256(pw);
+        var fresh = await storageGet(ADMIN_PASS_KEY);
+        if(hash2 === fresh){
+          sessionStorage.setItem(UNLOCK_FLAG, '1');
+          host.remove();
+          initAdmin();
+        } else {
+          draw('Incorrect password');
+        }
+      }
+    }
+    draw();
+  }
+
+  async function init(){
+    await loadEmployees();
+    if(isKioskLink()){
+      document.getElementById('app').style.display = 'none';
+      enterKiosk(true);
+      return;
+    }
+    document.getElementById('app').style.display = 'none';
+    if(sessionStorage.getItem(UNLOCK_FLAG) === '1'){
+      await initAdmin();
+      return;
+    }
+    var storedHash = await storageGet(ADMIN_PASS_KEY);
+    showLockScreen(storedHash);
+  }
+  init();
+
+})();
+</script>
+</body>
+</html>
