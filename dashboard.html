@@ -351,7 +351,7 @@
       <div class="panel">
         <div class="panel-head">
           <h2>Live employee location</h2>
-          <div class="date-pill" style="background:#FDE8EC; color:#D53A5E;">Sample pins &mdash; GPS not yet wired</div>
+          <div class="date-pill" id="mapStatusPill">Waiting for check-ins&hellip;</div>
         </div>
         <div class="map-wrap">
           <svg class="map-svg" viewBox="0 0 700 420" preserveAspectRatio="xMidYMid slice">
@@ -390,36 +390,30 @@
       <div class="panel">
         <div class="panel-head">
           <h2>Tasks today</h2>
-          <div class="date-pill" style="background:#FDE8EC; color:#D53A5E;">Sample data</div>
+          <div class="date-pill" id="tasksStatusPill">Waiting for data&hellip;</div>
         </div>
         <div class="tasks-body">
           <div class="donut-wrap">
             <svg viewBox="0 0 160 160" width="168" height="168">
               <circle cx="80" cy="80" r="64" fill="none" stroke="#EEF1FA" stroke-width="16"/>
-              <circle cx="80" cy="80" r="64" fill="none" stroke="#2FBE8F" stroke-width="16"
-                stroke-dasharray="402.1" stroke-dashoffset="105" stroke-linecap="round" transform="rotate(-90 80 80)"/>
-              <circle cx="80" cy="80" r="64" fill="none" stroke="#3B6FF6" stroke-width="16"
-                stroke-dasharray="402.1" stroke-dashoffset="252" stroke-linecap="round" transform="rotate(58 80 80)"/>
-              <circle cx="80" cy="80" r="64" fill="none" stroke="#F0567A" stroke-width="16"
-                stroke-dasharray="402.1" stroke-dashoffset="342" stroke-linecap="round" transform="rotate(146 80 80)"/>
+              <circle id="donutDone" cx="80" cy="80" r="64" fill="none" stroke="#2FBE8F" stroke-width="16"
+                stroke-dasharray="402.1" stroke-dashoffset="402.1" stroke-linecap="round" transform="rotate(-90 80 80)"/>
+              <circle id="donutPending" cx="80" cy="80" r="64" fill="none" stroke="#F0567A" stroke-width="16"
+                stroke-dasharray="402.1" stroke-dashoffset="402.1" stroke-linecap="round" transform="rotate(-90 80 80)"/>
             </svg>
             <div class="donut-center">
-              <div class="n">42</div>
+              <div class="n" id="tasksTotalNum">0</div>
               <div class="l">total tasks</div>
             </div>
           </div>
           <div class="legend-row">
             <div class="legend-item">
               <span class="lbl"><span class="dot" style="background:var(--green);"></span>Completed</span>
-              <span class="val">24</span>
-            </div>
-            <div class="legend-item">
-              <span class="lbl"><span class="dot" style="background:var(--blue);"></span>To do</span>
-              <span class="val">12</span>
+              <span class="val" id="tasksDoneVal">0</span>
             </div>
             <div class="legend-item">
               <span class="lbl"><span class="dot" style="background:var(--pink);"></span>Pending</span>
-              <span class="val">06</span>
+              <span class="val" id="tasksPendingVal">0</span>
             </div>
           </div>
         </div>
@@ -539,22 +533,6 @@
     }).join('');
   }
 
-  function renderSamplePins(){
-    // Illustrative only — replaced once the employee GPS PWA is live.
-    var positions = [[38,30],[30,52],[58,63],[70,38],[48,78]];
-    var host = document.getElementById('mapPins');
-    var sample = employees.length ? employees.slice(0,5) : [{name:'Awaiting staff'}];
-    host.innerHTML = sample.map(function(e, i){
-      var pos = positions[i % positions.length];
-      var busy = i % 2 === 0;
-      return '<div class="pin '+(busy?'busy':'')+'" style="top:'+pos[0]+'%; left:'+pos[1]+'%;">'+
-        '<div class="label">'+(e.name||'—')+'</div>'+
-        '<div class="ping"></div>'+
-        '<div class="head"><div class="init">'+initials(e.name)+'</div></div>'+
-      '</div>';
-    }).join('');
-  }
-
   function loadEmployees(){
     if(!db) return;
     db.collection(FS_COLLECTION).doc('att_employees').onSnapshot(function(doc){
@@ -563,10 +541,9 @@
       }catch(e){ employees = []; }
       renderStats();
       renderRoster();
-      renderSamplePins();
     }, function(err){
       console.error(err);
-      showBanner('Could not read employee roster from Firestore — check console/network. Showing sample data.');
+      showBanner('Could not read employee roster from Firestore — check console/network.');
     });
   }
 
@@ -587,11 +564,79 @@
     });
   }
 
+  function renderLivePins(locs){
+    var host = document.getElementById('mapPins');
+    var ids = Object.keys(locs);
+    var pill = document.getElementById('mapStatusPill');
+    if(ids.length === 0){
+      host.innerHTML = '';
+      pill.textContent = 'No one checked in yet';
+      pill.style.background = '#FDE8EC'; pill.style.color = '#D53A5E';
+      return;
+    }
+    pill.textContent = ids.length + ' live';
+    pill.style.background = '#E4F9F1'; pill.style.color = '#1A9C71';
+    // Map real lat/lng into the illustrative grid using a simple normalized spread
+    // (this SVG is a stylized map, not real geo-projected tiles).
+    host.innerHTML = ids.map(function(id, i){
+      var loc = locs[id];
+      var top = 25 + ((Math.abs(hashCode(id)) % 55));
+      var left = 15 + ((Math.abs(hashCode(id + 'x')) % 70));
+      var busy = loc.status === 'on';
+      var t = loc.ts ? new Date(loc.ts) : null;
+      var timeStr = t ? (pad2(t.getHours())+':'+pad2(t.getMinutes())) : '';
+      return '<div class="pin '+(busy?'busy':'')+'" style="top:'+top+'%; left:'+left+'%;">'+
+        '<div class="label">'+(loc.name||'—')+' &middot; '+timeStr+'</div>'+
+        '<div class="ping"></div>'+
+        '<div class="head"><div class="init">'+initials(loc.name)+'</div></div>'+
+      '</div>';
+    }).join('');
+  }
+  function hashCode(s){ var h=0; for(var i=0;i<s.length;i++){ h=((h<<5)-h)+s.charCodeAt(i); h|=0; } return h; }
+
+  function loadLiveLocations(){
+    if(!db) return;
+    db.collection(FS_COLLECTION).doc('field_locations').onSnapshot(function(doc){
+      var locs = {};
+      try{ locs = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : {}; }catch(e){ locs = {}; }
+      renderLivePins(locs);
+      document.getElementById('statOnDuty').textContent = Object.keys(locs).filter(function(k){ return locs[k].status === 'on'; }).length;
+    }, function(err){ console.error(err); });
+  }
+
+  function loadTodayTasks(){
+    if(!db) return;
+    var d = new Date();
+    var docId = 'field_tasks_' + d.getFullYear() + '-' + pad2(d.getMonth()+1) + '-' + pad2(d.getDate());
+    db.collection(FS_COLLECTION).doc(docId).onSnapshot(function(doc){
+      var all = {};
+      try{ all = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : {}; }catch(e){ all = {}; }
+      var total = 0, done = 0;
+      Object.keys(all).forEach(function(empId){
+        (all[empId]||[]).forEach(function(t){ total++; if(t.done) done++; });
+      });
+      var pending = total - done;
+      document.getElementById('tasksTotalNum').textContent = total;
+      document.getElementById('tasksDoneVal').textContent = done;
+      document.getElementById('tasksPendingVal').textContent = pending;
+      var circ = 402.1;
+      var doneOffset = total ? circ - (done/total)*circ : circ;
+      var pendingOffset = total ? circ - (pending/total)*circ : circ;
+      document.getElementById('donutDone').setAttribute('stroke-dashoffset', doneOffset);
+      var pendingCircle = document.getElementById('donutPending');
+      pendingCircle.setAttribute('stroke-dashoffset', pendingOffset);
+      pendingCircle.setAttribute('transform', 'rotate(' + (-90 + (total? (done/total)*360 : 0)) + ' 80 80)');
+      document.getElementById('tasksStatusPill').textContent = total ? 'Live' : 'No tasks logged yet';
+      document.getElementById('tasksStatusPill').style.background = total ? '#E4F9F1' : '#FDE8EC';
+      document.getElementById('tasksStatusPill').style.color = total ? '#1A9C71' : '#D53A5E';
+    }, function(err){ console.error(err); });
+  }
+
   if(db){
     loadEmployees();
     loadTodayAttendance();
-  } else {
-    renderSamplePins();
+    loadLiveLocations();
+    loadTodayTasks();
   }
 })();
 </script>
