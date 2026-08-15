@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Field Ops — Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+<style>
+  :root{
+    --navy:#141B3C;
+    --navy-soft:#1F2A54;
+    --bg:#F3F5FB;
+    --card:#FFFFFF;
+
+    --blue:#3B6FF6;      --blue-dk:#2451D6;
+    --pink:#F0567A;      --pink-dk:#D53A5E;
+    --green:#2FBE8F;     --green-dk:#1A9C71;
+    --violet:#8B5CF6;    --violet-dk:#6D3FE0;
+    --amber:#F5A623;     --amber-dk:#DB8A0A;
+
+    --slate:#6B7280;
+    --slate-light:#9CA3AF;
+    --line:#E7E9F2;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    font-family:'IBM Plex Sans', sans-serif;
+    background:var(--bg);
+    color:var(--navy);
+    display:flex;
+    min-height:100vh;
+  }
+  .mono{font-family:'IBM Plex Mono', monospace;}
+
+  /* Sidebar */
+  .sidebar{
+    width:76px;
+    background:linear-gradient(180deg, var(--navy) 0%, #0E1330 100%);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding:22px 0;
+    gap:8px;
+    flex-shrink:0;
+  }
+  .sidebar .logo{
+    width:38px; height:38px;
+    background:linear-gradient(135deg, var(--blue), var(--violet));
+    border-radius:10px;
+    display:flex; align-items:center; justify-content:center;
+    margin-bottom:26px;
+    color:#fff;
+    font-weight:700;
+    font-family:'Space Grotesk', sans-serif;
+    font-size:15px;
+    box-shadow:0 4px 12px rgba(59,111,246,.35);
+  }
+  .nav-item{
+    width:46px; height:46px;
+    display:flex; align-items:center; justify-content:center;
+    border-radius:12px;
+    color:#7C84AD;
+    cursor:pointer;
+    transition:background .15s, color .15s;
+  }
+  .nav-item:hover{ background:rgba(255,255,255,.08); color:#fff; }
+  .nav-item.active{ background:linear-gradient(135deg, var(--blue), var(--violet)); color:#fff; box-shadow:0 4px 14px rgba(59,111,246,.4);}
+  .nav-item svg{width:20px; height:20px;}
+
+  /* Main */
+  .main{ flex:1; display:flex; flex-direction:column; min-width:0; }
+  .topbar{
+    height:72px;
+    background:var(--card);
+    border-bottom:1px solid var(--line);
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:0 30px;
+    flex-shrink:0;
+  }
+  .topbar h1{ font-family:'Space Grotesk', sans-serif; font-size:20px; font-weight:600; }
+  .topbar .sub{ font-size:12.5px; color:var(--slate); margin-top:2px; }
+  .search-box{
+    display:flex; align-items:center; gap:8px;
+    background:var(--bg);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:9px 14px;
+    width:300px;
+    color:var(--slate);
+    font-size:13px;
+  }
+  .search-box svg{width:15px; height:15px; flex-shrink:0;}
+  .topbar-right{ display:flex; align-items:center; gap:18px; }
+  .bell{ position:relative; color:var(--navy); cursor:pointer; }
+  .bell svg{width:20px; height:20px;}
+  .bell::after{
+    content:''; position:absolute; top:-2px; right:-2px;
+    width:8px; height:8px; border-radius:50%; background:var(--pink);
+    border:2px solid var(--card);
+  }
+  .avatar{
+    width:36px; height:36px; border-radius:50%;
+    background:linear-gradient(135deg, var(--violet), var(--pink));
+    color:#fff;
+    display:flex; align-items:center; justify-content:center;
+    font-size:12px; font-weight:600;
+  }
+
+  .content{ padding:26px 30px 36px; overflow-y:auto; }
+
+  /* Stat cards - colorful gradient tiles */
+  .stats-row{
+    display:grid;
+    grid-template-columns:repeat(5, 1fr);
+    gap:16px;
+    margin-bottom:22px;
+  }
+  .stat-card{
+    border-radius:14px;
+    padding:18px 20px;
+    color:#fff;
+    position:relative;
+    overflow:hidden;
+    box-shadow:0 8px 20px -6px rgba(20,27,60,.25);
+  }
+  .stat-card::after{
+    content:'';
+    position:absolute; right:-14px; bottom:-14px;
+    width:70px; height:70px;
+    border-radius:50%;
+    background:rgba(255,255,255,.14);
+  }
+  .stat-card.c1{ background:linear-gradient(135deg, var(--blue), var(--blue-dk)); }
+  .stat-card.c2{ background:linear-gradient(135deg, var(--pink), var(--pink-dk)); }
+  .stat-card.c3{ background:linear-gradient(135deg, var(--green), var(--green-dk)); }
+  .stat-card.c4{ background:linear-gradient(135deg, var(--violet), var(--violet-dk)); }
+  .stat-card.c5{ background:linear-gradient(135deg, var(--amber), var(--amber-dk)); }
+  .stat-card .icon{
+    width:32px; height:32px;
+    background:rgba(255,255,255,.2);
+    border-radius:8px;
+    display:flex; align-items:center; justify-content:center;
+    margin-bottom:14px;
+  }
+  .stat-card .icon svg{ width:17px; height:17px; }
+  .stat-card .num{
+    font-family:'Space Grotesk', sans-serif;
+    font-size:30px;
+    font-weight:700;
+    line-height:1;
+    margin-bottom:5px;
+    position:relative; z-index:1;
+  }
+  .stat-card .label{ font-size:12.5px; opacity:.92; position:relative; z-index:1; }
+
+  /* Grid layout */
+  .grid-main{ display:grid; grid-template-columns:1.7fr 1fr; gap:18px; align-items:start; }
+  .panel{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:16px;
+    overflow:hidden;
+    box-shadow:0 4px 14px -6px rgba(20,27,60,.08);
+  }
+  .panel-head{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:18px 22px;
+    border-bottom:1px solid var(--line);
+  }
+  .panel-head h2{ font-family:'Space Grotesk', sans-serif; font-size:15.5px; font-weight:600; }
+  .panel-head .date-pill{
+    font-size:12px; color:var(--blue-dk);
+    background:#EAF0FE;
+    padding:5px 13px;
+    border-radius:20px;
+    font-family:'IBM Plex Mono', monospace;
+    font-weight:500;
+  }
+
+  /* Map */
+  .map-wrap{ position:relative; height:430px; background:linear-gradient(180deg, #EDF1FB, #E7ECFA); overflow:hidden; }
+  .map-svg{ width:100%; height:100%; display:block; }
+  .pin{ position:absolute; transform:translate(-50%, -100%); cursor:pointer; }
+  .pin .ping{
+    position:absolute; top:22px; left:50%;
+    width:14px; height:14px; margin-left:-7px; margin-top:-7px;
+    border-radius:50%; background:var(--green); opacity:.4;
+    animation:ping 2.2s ease-out infinite;
+  }
+  .pin.busy .ping{ background:var(--blue); }
+  @keyframes ping{ 0%{ transform:scale(0.5); opacity:.5; } 100%{ transform:scale(2.8); opacity:0; } }
+  .pin .head{
+    width:32px; height:32px; border-radius:50% 50% 50% 0;
+    background:linear-gradient(135deg, var(--blue), var(--violet));
+    transform:rotate(-45deg);
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 3px 10px rgba(59,111,246,.4);
+    position:relative;
+  }
+  .pin.busy .head{ background:linear-gradient(135deg, var(--green), var(--green-dk)); box-shadow:0 3px 10px rgba(47,190,143,.4); }
+  .pin .head .init{ transform:rotate(45deg); color:#fff; font-size:10.5px; font-weight:700; font-family:'Space Grotesk', sans-serif; }
+  .pin .label{
+    position:absolute; top:-27px; left:50%; transform:translateX(-50%);
+    background:var(--navy); color:#fff; font-size:11px;
+    padding:4px 10px; border-radius:7px; white-space:nowrap;
+    opacity:0; pointer-events:none; transition:opacity .12s;
+    font-family:'IBM Plex Mono', monospace;
+  }
+  .pin:hover .label{ opacity:1; }
+  .map-search{
+    position:absolute; top:16px; left:16px;
+    background:var(--card); border:1px solid var(--line); border-radius:10px;
+    padding:10px 15px; font-size:12.5px; color:var(--slate);
+    display:flex; align-items:center; gap:8px; width:230px;
+    box-shadow:0 4px 14px rgba(20,27,60,.1);
+  }
+  .map-search svg{width:14px; height:14px;}
+  .map-legend{
+    position:absolute; bottom:16px; left:16px;
+    background:var(--card); border:1px solid var(--line); border-radius:10px;
+    padding:9px 14px; font-size:11.5px; color:var(--slate);
+    display:flex; gap:16px;
+    box-shadow:0 4px 14px rgba(20,27,60,.08);
+  }
+  .map-legend span{ display:flex; align-items:center; gap:6px; }
+  .dot{ width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+
+  /* Tasks donut */
+  .tasks-body{ padding:22px; display:flex; flex-direction:column; align-items:center; }
+  .donut-wrap{ position:relative; width:168px; height:168px; margin:6px 0 20px; }
+  .donut-center{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+  .donut-center .n{ font-family:'Space Grotesk', sans-serif; font-size:32px; font-weight:700; color:var(--navy); }
+  .donut-center .l{ font-size:11.5px; color:var(--slate); margin-top:2px; }
+  .legend-row{ width:100%; display:flex; flex-direction:column; gap:11px; }
+  .legend-item{ display:flex; align-items:center; justify-content:space-between; font-size:13.5px; }
+  .legend-item .lbl{ display:flex; align-items:center; gap:9px; color:var(--navy); font-weight:500; }
+  .legend-item .val{ font-family:'IBM Plex Mono', monospace; color:var(--slate); font-size:12.5px; }
+
+  /* Roster list */
+  .roster{ margin-top:18px; }
+  .roster-row{
+    display:grid; grid-template-columns:32px 1fr 100px 110px 90px;
+    align-items:center; gap:10px; padding:13px 22px;
+    border-bottom:1px solid var(--line); font-size:13.5px;
+  }
+  .roster-row:last-child{ border-bottom:none; }
+  .roster-row.head{ color:var(--slate); font-size:11px; text-transform:uppercase; letter-spacing:.05em; background:#FAFBFD; }
+  .r-avatar{
+    width:28px; height:28px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-size:10.5px; font-weight:700; color:#fff;
+  }
+  .r-name{ font-weight:600; }
+  .r-role{ font-size:11.5px; color:var(--slate); font-weight:400; margin-top:1px; }
+  .badge{
+    font-size:11.5px; padding:4px 11px; border-radius:20px; font-weight:600;
+    display:inline-flex; align-items:center; gap:6px; width:fit-content;
+  }
+  .badge.on-duty{ background:#E4F9F1; color:var(--green-dk); }
+  .badge.present{ background:#FFF3E0; color:var(--amber-dk); }
+  .badge.absent{ background:#FDE8EC; color:var(--pink-dk); }
+  .r-dist{ font-family:'IBM Plex Mono', monospace; color:var(--slate); font-size:12.5px; }
+
+  @media (max-width: 1180px){
+    .grid-main{ grid-template-columns:1fr; }
+    .stats-row{ grid-template-columns:repeat(3,1fr); }
+  }
+</style>
+</head>
+<body>
+
+<div class="sidebar">
+  <div class="logo">FO</div>
+  <div class="nav-item active" title="Dashboard">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+  </div>
+  <div class="nav-item" title="Employees">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20c1.5-4 4.5-6 7.5-6s6 2 7.5 6"/></svg>
+  </div>
+  <div class="nav-item" title="Live locations">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 21s7-6.5 7-11.5A7 7 0 0 0 5 9.5C5 14.5 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.3"/></svg>
+  </div>
+  <div class="nav-item" title="Tasks">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M8 12l2.5 2.5L16 9"/></svg>
+  </div>
+  <div class="nav-item" title="Attendance">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+  </div>
+  <div class="nav-item" title="Reports">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>
+  </div>
+  <div class="nav-item" title="Settings" style="margin-top:auto;">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+  </div>
+</div>
+
+<div class="main">
+  <div class="topbar">
+    <div>
+      <h1>Field ops dashboard</h1>
+      <div class="sub">Hyderabad region &middot; Wed, 14 Aug 2026</div>
+    </div>
+    <div class="search-box">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      Search employees, tasks...
+    </div>
+    <div class="topbar-right">
+      <div class="bell"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 8a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6"/><path d="M10 20a2 2 0 0 0 4 0"/></svg></div>
+      <div class="avatar">RG</div>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <div class="stats-row">
+      <div class="stat-card c1">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20c1.5-4 4.5-6 7.5-6s6 2 7.5 6"/></svg></div>
+        <div class="num" id="statEmployees">—</div>
+        <div class="label">Employees</div>
+      </div>
+      <div class="stat-card c2">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg></div>
+        <div class="num" id="statPresent">—</div>
+        <div class="label">Present today</div>
+      </div>
+      <div class="stat-card c3">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M12 21s7-6.5 7-11.5A7 7 0 0 0 5 9.5C5 14.5 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.3"/></svg></div>
+        <div class="num" id="statOnDuty">—</div>
+        <div class="label">On duty now</div>
+      </div>
+      <div class="stat-card c4">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg></div>
+        <div class="num" id="statAbsent">—</div>
+        <div class="label">Absent today</div>
+      </div>
+      <div class="stat-card c5">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg></div>
+        <div class="num" id="statDepts">—</div>
+        <div class="label">Departments</div>
+      </div>
+    </div>
+    <div id="connBanner" style="display:none; margin:-8px 0 18px; padding:10px 16px; border-radius:10px; background:#FFF3E0; color:#8a5316; font-size:12.5px; font-weight:500;"></div>
+
+    <div class="grid-main">
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Live employee location</h2>
+          <div class="date-pill" style="background:#FDE8EC; color:#D53A5E;">Sample pins &mdash; GPS not yet wired</div>
+        </div>
+        <div class="map-wrap">
+          <svg class="map-svg" viewBox="0 0 700 420" preserveAspectRatio="xMidYMid slice">
+            <rect width="700" height="420" fill="#EDF1FB"/>
+            <g stroke="#DDE4F7" stroke-width="10">
+              <line x1="0" y1="90" x2="700" y2="90"/>
+              <line x1="0" y1="220" x2="700" y2="200"/>
+              <line x1="0" y1="350" x2="700" y2="330"/>
+            </g>
+            <g stroke="#DDE4F7" stroke-width="8">
+              <line x1="120" y1="0" x2="150" y2="420"/>
+              <line x1="330" y1="0" x2="360" y2="420"/>
+              <line x1="540" y1="0" x2="510" y2="420"/>
+            </g>
+            <g stroke="#CBD5F5" stroke-width="1.4" fill="none" opacity="0.8">
+              <circle cx="230" cy="150" r="60"/>
+              <circle cx="480" cy="260" r="80"/>
+            </g>
+            <text x="24" y="40" font-family="IBM Plex Mono, monospace" font-size="12" fill="#A7B2DA" letter-spacing="2">HYDERABAD</text>
+          </svg>
+
+          <div class="map-search">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+            Search employee
+          </div>
+
+          <div id="mapPins"></div>
+
+          <div class="map-legend">
+            <span><span class="dot" style="background:var(--green);"></span>On duty</span>
+            <span><span class="dot" style="background:var(--blue);"></span>Checked in</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Tasks today</h2>
+          <div class="date-pill" style="background:#FDE8EC; color:#D53A5E;">Sample data</div>
+        </div>
+        <div class="tasks-body">
+          <div class="donut-wrap">
+            <svg viewBox="0 0 160 160" width="168" height="168">
+              <circle cx="80" cy="80" r="64" fill="none" stroke="#EEF1FA" stroke-width="16"/>
+              <circle cx="80" cy="80" r="64" fill="none" stroke="#2FBE8F" stroke-width="16"
+                stroke-dasharray="402.1" stroke-dashoffset="105" stroke-linecap="round" transform="rotate(-90 80 80)"/>
+              <circle cx="80" cy="80" r="64" fill="none" stroke="#3B6FF6" stroke-width="16"
+                stroke-dasharray="402.1" stroke-dashoffset="252" stroke-linecap="round" transform="rotate(58 80 80)"/>
+              <circle cx="80" cy="80" r="64" fill="none" stroke="#F0567A" stroke-width="16"
+                stroke-dasharray="402.1" stroke-dashoffset="342" stroke-linecap="round" transform="rotate(146 80 80)"/>
+            </svg>
+            <div class="donut-center">
+              <div class="n">42</div>
+              <div class="l">total tasks</div>
+            </div>
+          </div>
+          <div class="legend-row">
+            <div class="legend-item">
+              <span class="lbl"><span class="dot" style="background:var(--green);"></span>Completed</span>
+              <span class="val">24</span>
+            </div>
+            <div class="legend-item">
+              <span class="lbl"><span class="dot" style="background:var(--blue);"></span>To do</span>
+              <span class="val">12</span>
+            </div>
+            <div class="legend-item">
+              <span class="lbl"><span class="dot" style="background:var(--pink);"></span>Pending</span>
+              <span class="val">06</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="panel roster" style="margin-top:18px;">
+      <div class="panel-head">
+        <h2>Field roster</h2>
+        <div class="date-pill" id="rosterCount">—</div>
+      </div>
+      <div class="roster-row head">
+        <div></div><div>Employee</div><div>Status</div><div>Department</div><div>Staff ID</div>
+      </div>
+      <div id="rosterBody"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+(function(){
+  // Same Firebase project + storage convention as your attendance-app
+  // (collection "attendance_app_data", doc per key, JSON-stringified value).
+  var FIREBASE_CONFIG = {
+    apiKey: "AIzaSyCFzVT_T_DLz6L6-TrR66tdFRB7PPQBzZA",
+    authDomain: "attendance-app-bd7b2.firebaseapp.com",
+    projectId: "attendance-app-bd7b2",
+    storageBucket: "attendance-app-bd7b2.firebasestorage.app",
+    messagingSenderId: "106056240657",
+    appId: "1:106056240657:web:a47f7eb9037138bb2d2bb0"
+  };
+  var FS_COLLECTION = 'attendance_app_data';
+  var db = null;
+  try{
+    firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.firestore();
+  }catch(e){
+    console.error('Firebase init failed', e);
+    showBanner('Could not connect to Firebase — showing sample data only.');
+  }
+
+  function showBanner(msg){
+    var b = document.getElementById('connBanner');
+    b.textContent = msg;
+    b.style.display = 'block';
+  }
+
+  function pad2(n){ return String(n).padStart(2,'0'); }
+  function monthKey(d){ return d.getFullYear() + '-' + pad2(d.getMonth()+1); }
+  function initials(name){
+    var parts = String(name||'').trim().split(/\s+/).filter(Boolean);
+    if(parts.length===0) return '?';
+    if(parts.length===1) return parts[0].slice(0,2).toUpperCase();
+    return (parts[0][0]+parts[parts.length-1][0]).toUpperCase();
+  }
+  var GRADIENTS = [
+    'linear-gradient(135deg,var(--blue),var(--violet))',
+    'linear-gradient(135deg,var(--amber),var(--pink))',
+    'linear-gradient(135deg,var(--green),var(--blue))',
+    'linear-gradient(135deg,var(--pink),var(--violet))',
+    'linear-gradient(135deg,var(--violet),var(--blue))'
+  ];
+
+  var employees = [];
+  var attendanceToday = {};
+
+  function renderStats(){
+    var today = new Date();
+    var depts = {};
+    employees.forEach(function(e){ if(e.dept) depts[e.dept] = true; });
+
+    var present = 0, absent = 0;
+    employees.forEach(function(e){
+      var rec = attendanceToday[e.id];
+      var c = rec && typeof rec === 'object' ? rec.c : rec;
+      if(c === 'P' || c === 'N' || c === 'HD') present++;
+      if(c === 'A') absent++;
+    });
+
+    document.getElementById('statEmployees').textContent = employees.length || '0';
+    document.getElementById('statPresent').textContent = present;
+    document.getElementById('statOnDuty').textContent = present; // no separate GPS "on duty" signal yet
+    document.getElementById('statAbsent').textContent = absent;
+    document.getElementById('statDepts').textContent = Object.keys(depts).length;
+    document.getElementById('rosterCount').textContent = employees.length + ' total';
+  }
+
+  function renderRoster(){
+    var host = document.getElementById('rosterBody');
+    if(employees.length === 0){
+      host.innerHTML = '<div style="padding:24px 22px; color:var(--slate); font-size:13px;">No employees found yet in att_employees — add staff from your attendance-app admin console and they\'ll appear here automatically.</div>';
+      return;
+    }
+    host.innerHTML = employees.slice(0, 12).map(function(e, i){
+      var rec = attendanceToday[e.id];
+      var c = rec && typeof rec === 'object' ? rec.c : rec;
+      var badge = c === 'P' || c === 'N' ? '<span class="badge on-duty">Present</span>'
+                : c === 'A' ? '<span class="badge absent">Absent</span>'
+                : c === 'HD' ? '<span class="badge present">Half day</span>'
+                : '<span class="badge present" style="background:#EEF1FA;color:#6B7280;">Not marked</span>';
+      return '<div class="roster-row">'+
+        '<div class="r-avatar" style="background:'+GRADIENTS[i % GRADIENTS.length]+';">'+initials(e.name)+'</div>'+
+        '<div><div class="r-name">'+(e.name||'—')+'</div><div class="r-role">'+(e.gender==='F'?'Staff':'Staff')+'</div></div>'+
+        '<div>'+badge+'</div>'+
+        '<div>'+(e.dept||'—')+'</div>'+
+        '<div class="r-dist mono">'+(e.staffId||'—')+'</div>'+
+      '</div>';
+    }).join('');
+  }
+
+  function renderSamplePins(){
+    // Illustrative only — replaced once the employee GPS PWA is live.
+    var positions = [[38,30],[30,52],[58,63],[70,38],[48,78]];
+    var host = document.getElementById('mapPins');
+    var sample = employees.length ? employees.slice(0,5) : [{name:'Awaiting staff'}];
+    host.innerHTML = sample.map(function(e, i){
+      var pos = positions[i % positions.length];
+      var busy = i % 2 === 0;
+      return '<div class="pin '+(busy?'busy':'')+'" style="top:'+pos[0]+'%; left:'+pos[1]+'%;">'+
+        '<div class="label">'+(e.name||'—')+'</div>'+
+        '<div class="ping"></div>'+
+        '<div class="head"><div class="init">'+initials(e.name)+'</div></div>'+
+      '</div>';
+    }).join('');
+  }
+
+  function loadEmployees(){
+    if(!db) return;
+    db.collection(FS_COLLECTION).doc('att_employees').onSnapshot(function(doc){
+      try{
+        employees = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : [];
+      }catch(e){ employees = []; }
+      renderStats();
+      renderRoster();
+      renderSamplePins();
+    }, function(err){
+      console.error(err);
+      showBanner('Could not read employee roster from Firestore — check console/network. Showing sample data.');
+    });
+  }
+
+  function loadTodayAttendance(){
+    if(!db) return;
+    var mk = monthKey(new Date());
+    var day = new Date().getDate();
+    db.collection(FS_COLLECTION).doc('att_data_' + mk).onSnapshot(function(doc){
+      var monthData = {};
+      try{ monthData = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : {}; }catch(e){ monthData = {}; }
+      attendanceToday = {};
+      Object.keys(monthData).forEach(function(empId){
+        var rec = monthData[empId] && monthData[empId][day];
+        if(rec) attendanceToday[empId] = rec;
+      });
+      renderStats();
+      renderRoster();
+    });
+  }
+
+  if(db){
+    loadEmployees();
+    loadTodayAttendance();
+  } else {
+    renderSamplePins();
+  }
+})();
+</script>
+
+</body>
+</html>
