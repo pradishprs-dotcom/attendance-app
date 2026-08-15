@@ -303,7 +303,7 @@
   <div class="topbar">
     <div>
       <h1>Field ops dashboard</h1>
-      <div class="sub">Hyderabad region &middot; Wed, 14 Aug 2026</div>
+      <div class="sub" id="todayLabel">Hyderabad region</div>
     </div>
     <div class="search-box">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
@@ -471,6 +471,13 @@
 
   function pad2(n){ return String(n).padStart(2,'0'); }
   function monthKey(d){ return d.getFullYear() + '-' + pad2(d.getMonth()+1); }
+  function todayLabel(){
+    var d = new Date();
+    var days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return 'Hyderabad region &middot; ' + days[d.getDay()] + ', ' + d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
+  }
+  document.getElementById('todayLabel').innerHTML = todayLabel();
   function initials(name){
     var parts = String(name||'').trim().split(/\s+/).filter(Boolean);
     if(parts.length===0) return '?';
