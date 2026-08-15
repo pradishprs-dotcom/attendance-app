@@ -433,13 +433,21 @@
   }
 
   function writeAttendance(patch){
-    return monthDocRef().get().then(function(doc){
-      var monthData = {};
-      try{ monthData = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : {}; }catch(e){ monthData = {}; }
-      var day = new Date().getDate();
-      if(!monthData[currentEmp.id]) monthData[currentEmp.id] = {};
-      monthData[currentEmp.id][day] = Object.assign({}, monthData[currentEmp.id][day] || {}, patch);
-      return monthDocRef().set({ value: JSON.stringify(monthData) });
+    // Transaction, not read-then-set — prevents a stray GPS update from
+    // overwriting a check-out (or vice versa) if both fire close together.
+    var ref = monthDocRef();
+    return db.runTransaction(function(tx){
+      return tx.get(ref).then(function(doc){
+        var monthData = {};
+        try{ monthData = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : {}; }catch(e){ monthData = {}; }
+        var day = new Date().getDate();
+        if(!monthData[currentEmp.id]) monthData[currentEmp.id] = {};
+        var existing = monthData[currentEmp.id][day] || {};
+        // Once checked out, nothing (e.g. a late GPS tick) may re-add distance or clear outT.
+        if(existing.outT && !patch.outT){ return; }
+        monthData[currentEmp.id][day] = Object.assign({}, existing, patch);
+        tx.set(ref, { value: JSON.stringify(monthData) });
+      });
     });
   }
 
@@ -460,6 +468,7 @@
   function startWatching(){
     if(!navigator.geolocation || watchId !== null) return;
     watchId = navigator.geolocation.watchPosition(function(pos){
+      if(checkOutTime) return; // hard guard: ignore any late tick after checkout
       var c = pos.coords;
       if(lastPos){
         var d = haversine(lastPos.latitude, lastPos.longitude, c.latitude, c.longitude);
