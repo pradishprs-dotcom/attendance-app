@@ -106,7 +106,7 @@
   .topbar-right{ display:flex; align-items:center; gap:18px; }
   .bell{ position:relative; color:var(--navy); cursor:pointer; }
   .bell svg{width:20px; height:20px;}
-  .bell::after{
+  .bell.has-alerts::after{
     content:''; position:absolute; top:-2px; right:-2px;
     width:8px; height:8px; border-radius:50%; background:var(--pink);
     border:2px solid var(--card);
@@ -334,12 +334,16 @@
       <h1>Field ops dashboard</h1>
       <div class="sub" id="todayLabel">Hyderabad region</div>
     </div>
-    <div class="search-box">
+    <div class="search-box" style="position:relative;">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-      Search employees, tasks...
+      <input id="topSearchInput" type="text" placeholder="Search employees, tasks..." style="border:none; outline:none; background:transparent; font-family:inherit; font-size:13px; width:100%; color:var(--navy);" />
     </div>
-    <div class="topbar-right">
-      <div class="bell"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 8a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6"/><path d="M10 20a2 2 0 0 0 4 0"/></svg></div>
+    <div class="topbar-right" style="position:relative;">
+      <div class="bell" id="bellIcon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 8a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6"/><path d="M10 20a2 2 0 0 0 4 0"/></svg></div>
+      <div id="notifPanel" style="display:none; position:absolute; top:44px; right:44px; width:280px; background:#fff; border:1px solid var(--line); border-radius:14px; box-shadow:0 12px 30px rgba(20,27,60,.18); z-index:9999; overflow:hidden;">
+        <div style="padding:14px 16px; border-bottom:1px solid var(--line); font-weight:600; font-size:13px;">Alerts</div>
+        <div id="notifList" style="max-height:280px; overflow-y:auto;"></div>
+      </div>
       <div id="signOutBtn" title="Sign out" style="width:34px; height:34px; border-radius:50%; background:#FDE8EC; color:#D53A5E; display:flex; align-items:center; justify-content:center; cursor:pointer;">
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
       </div>
@@ -436,6 +440,30 @@
 
     </div>
 
+    <div class="panel" style="margin-top:18px;">
+      <div class="panel-head">
+        <h2>Assign a task</h2>
+      </div>
+      <div style="padding:18px 20px; display:grid; grid-template-columns:1fr 1fr 1.6fr auto; gap:10px; align-items:end;">
+        <div>
+          <div style="font-size:11px; color:var(--slate); margin-bottom:5px;">Employee</div>
+          <select id="assignEmpSelect" style="width:100%; padding:9px 11px; border-radius:9px; border:1px solid var(--line); font-family:inherit; font-size:12.5px; background:#fff;">
+            <option value="">Select employee…</option>
+          </select>
+        </div>
+        <div>
+          <div style="font-size:11px; color:var(--slate); margin-bottom:5px;">Date</div>
+          <input id="assignTaskDate" type="date" style="width:100%; padding:9px 11px; border-radius:9px; border:1px solid var(--line); font-family:inherit; font-size:12.5px;" />
+        </div>
+        <div>
+          <div style="font-size:11px; color:var(--slate); margin-bottom:5px;">Task</div>
+          <input id="assignTaskText" type="text" placeholder="e.g. Visit Dr. Rao's clinic" style="width:100%; padding:9px 11px; border-radius:9px; border:1px solid var(--line); font-family:inherit; font-size:12.5px;" />
+        </div>
+        <button id="assignTaskBtn" style="padding:10px 18px; border:none; border-radius:9px; background:linear-gradient(135deg,var(--blue),var(--violet)); color:#fff; font-weight:600; font-size:12.5px; cursor:pointer; white-space:nowrap;">Assign</button>
+      </div>
+      <div id="assignTaskStatus" style="padding:0 20px 16px; font-size:11.5px; color:var(--slate);"></div>
+    </div>
+
     <div class="panel roster" style="margin-top:18px;">
       <div class="panel-head">
         <h2>Field roster</h2>
@@ -444,7 +472,7 @@
       <div class="roster-row head">
         <div></div><div>Employee</div><div>Status</div><div>Department</div><div>Staff ID</div>
       </div>
-      <div id="rosterBody"></div>
+      <div id="rosterBody" style="max-height:520px; overflow-y:auto;"></div>
     </div>
 
     <div class="grid-main" style="margin-top:18px;" id="leavesPanelSection">
@@ -595,7 +623,7 @@
     </div>
 
     <!-- Visit photo lightbox -->
-    <div id="visitLightbox" style="display:none; position:fixed; inset:0; background:rgba(20,27,60,.85); z-index:200; align-items:center; justify-content:center; padding:20px;">
+    <div id="visitLightbox" style="display:none; position:fixed; inset:0; background:rgba(20,27,60,.85); z-index:9999; align-items:center; justify-content:center; padding:20px;">
       <div style="background:#fff; border-radius:16px; max-width:420px; width:100%; overflow:hidden;">
         <img id="lightboxImg" style="width:100%; display:block;" />
         <div style="padding:16px 18px;">
@@ -717,32 +745,99 @@
   var latestPendingLeaves = 0;
 
   // ---------- Sidebar view switching ----------
+  function switchView(view, scrollTarget){
+    Array.prototype.forEach.call(document.querySelectorAll('.nav-item[data-view]'), function(i){ i.classList.remove('active'); });
+    var matching = document.querySelector('.nav-item[data-view="' + view + '"]' + (scrollTarget ? '[data-scroll="' + scrollTarget + '"]' : ':not([data-scroll])'));
+    if(matching) matching.classList.add('active');
+
+    document.getElementById('view-overview').style.display = view === 'overview' ? 'block' : 'none';
+    document.getElementById('view-employees').style.display = view === 'employees' ? 'block' : 'none';
+    document.getElementById('view-reports').style.display = view === 'reports' ? 'block' : 'none';
+
+    if(view === 'overview'){
+      setTimeout(function(){ if(leafletMap) leafletMap.invalidateSize(); }, 50);
+      if(scrollTarget){
+        setTimeout(function(){
+          var el = document.getElementById(scrollTarget);
+          if(el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 80);
+      }
+    }
+    if(view === 'employees') renderEmployeeManageList();
+    if(view === 'reports') renderReports();
+  }
+
   Array.prototype.forEach.call(document.querySelectorAll('.nav-item[data-view]'), function(item){
     item.addEventListener('click', function(){
-      var view = item.getAttribute('data-view');
-      var scrollTarget = item.getAttribute('data-scroll');
-
-      Array.prototype.forEach.call(document.querySelectorAll('.nav-item[data-view]'), function(i){ i.classList.remove('active'); });
-      item.classList.add('active');
-
-      document.getElementById('view-overview').style.display = view === 'overview' ? 'block' : 'none';
-      document.getElementById('view-employees').style.display = view === 'employees' ? 'block' : 'none';
-      document.getElementById('view-reports').style.display = view === 'reports' ? 'block' : 'none';
-
-      if(view === 'overview'){
-        // Leaflet needs a resize nudge after being hidden/shown, else tiles render blank.
-        setTimeout(function(){ if(leafletMap) leafletMap.invalidateSize(); }, 50);
-        if(scrollTarget){
-          setTimeout(function(){
-            var el = document.getElementById(scrollTarget);
-            if(el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }, 80);
-        }
-      }
-      if(view === 'employees') renderEmployeeManageList();
-      if(view === 'reports') renderReports();
+      switchView(item.getAttribute('data-view'), item.getAttribute('data-scroll'));
     });
   });
+
+  // ---------- Top search bar: filters roster + per-employee task list ----------
+  document.getElementById('topSearchInput').addEventListener('input', function(){
+    rosterFilter = this.value.trim();
+    if(document.getElementById('view-overview').style.display === 'none'){
+      switchView('overview', null);
+    }
+    renderRoster();
+    if(rosterFilter){
+      setTimeout(function(){
+        var el = document.getElementById('mapPanel');
+        var roster = document.querySelector('.roster');
+        if(roster) roster.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 60);
+    }
+  });
+
+  // ---------- Notification bell ----------
+  document.getElementById('bellIcon').addEventListener('click', function(e){
+    e.stopPropagation();
+    var panel = document.getElementById('notifPanel');
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    if(panel.style.display === 'block') renderNotifPanel();
+  });
+  document.addEventListener('click', function(e){
+    var panel = document.getElementById('notifPanel');
+    if(panel.style.display === 'block' && !panel.contains(e.target) && e.target.id !== 'bellIcon'){
+      panel.style.display = 'none';
+    }
+  });
+
+  function renderNotifPanel(){
+    var items = [];
+    var absentCount = 0;
+    employees.forEach(function(e){
+      var rec = attendanceToday[e.id];
+      var c = rec && typeof rec === 'object' ? rec.c : rec;
+      if(c === 'A') absentCount++;
+    });
+    if(latestPendingLeaves > 0){
+      items.push({ color: 'var(--amber)', text: latestPendingLeaves + ' pending leave request' + (latestPendingLeaves > 1 ? 's' : ''), action: function(){ switchView('overview', 'leavesPanelSection'); } });
+    }
+    if(absentCount > 0){
+      items.push({ color: 'var(--pink)', text: absentCount + ' employee' + (absentCount > 1 ? 's' : '') + ' absent today', action: function(){ switchView('overview', null); } });
+    }
+    if(latestTasksTotal > 0 && latestTasksDone < latestTasksTotal){
+      items.push({ color: 'var(--blue)', text: (latestTasksTotal - latestTasksDone) + ' task' + ((latestTasksTotal - latestTasksDone) > 1 ? 's' : '') + ' still pending today', action: function(){ switchView('overview', 'tasksPanel'); } });
+    }
+    var host = document.getElementById('notifList');
+    if(items.length === 0){
+      host.innerHTML = '<div style="padding:16px; color:var(--slate); font-size:12.5px;">No alerts right now.</div>';
+    } else {
+      host.innerHTML = items.map(function(it, i){
+        return '<div class="notif-item" data-i="'+i+'" style="display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--line); cursor:pointer; font-size:12.5px;">'+
+          '<span style="width:7px; height:7px; border-radius:50%; background:'+it.color+'; flex-shrink:0;"></span>'+
+          '<span>'+it.text+'</span></div>';
+      }).join('');
+      Array.prototype.forEach.call(host.querySelectorAll('.notif-item'), function(el){
+        el.addEventListener('click', function(){
+          items[parseInt(el.getAttribute('data-i'),10)].action();
+          document.getElementById('notifPanel').style.display = 'none';
+        });
+      });
+    }
+    document.getElementById('bellIcon').classList.toggle('has-alerts', items.length > 0);
+  }
 
   function renderStats(){
     var today = new Date();
@@ -765,13 +860,23 @@
     document.getElementById('rosterCount').textContent = employees.length + ' total';
   }
 
+  var rosterFilter = '';
   function renderRoster(){
     var host = document.getElementById('rosterBody');
     if(employees.length === 0){
       host.innerHTML = '<div style="padding:24px 22px; color:var(--slate); font-size:13px;">No employees found yet in att_employees — add staff from your attendance-app admin console and they\'ll appear here automatically.</div>';
       return;
     }
-    host.innerHTML = employees.slice(0, 12).map(function(e, i){
+    var list = employees;
+    if(rosterFilter){
+      var f = rosterFilter.toLowerCase();
+      list = employees.filter(function(e){ return (e.name||'').toLowerCase().indexOf(f) > -1; });
+    }
+    if(list.length === 0){
+      host.innerHTML = '<div style="padding:24px 22px; color:var(--slate); font-size:13px;">No employees match "'+rosterFilter+'".</div>';
+      return;
+    }
+    host.innerHTML = list.map(function(e, i){
       var rec = attendanceToday[e.id];
       var c = rec && typeof rec === 'object' ? rec.c : rec;
       var badge = c === 'P' || c === 'N' ? '<span class="badge on-duty">Present</span>'
@@ -799,6 +904,7 @@
       populateExportEmpSelect();
       if(document.getElementById('view-employees').style.display !== 'none') renderEmployeeManageList();
       if(document.getElementById('view-reports').style.display !== 'none') renderReports();
+      renderNotifPanel();
     }, function(err){
       console.error(err);
       showBanner('Could not read employee roster from Firestore — check console/network.');
@@ -820,6 +926,7 @@
       renderStats();
       renderRoster();
       if(document.getElementById('view-reports').style.display !== 'none') renderReports();
+      renderNotifPanel();
     });
   }
 
@@ -943,6 +1050,7 @@
         }).join('');
       }
       if(document.getElementById('view-reports').style.display !== 'none') renderReports();
+      renderNotifPanel();
     }, function(err){ console.error(err); });
   }
 
@@ -1081,6 +1189,7 @@
         document.getElementById('visitsCountPill').textContent = visits.length + ' logged';
         latestVisitsCount = visits.length;
         if(document.getElementById('view-reports').style.display !== 'none') renderReports();
+      renderNotifPanel();
       }, function(err){ console.error('loadFieldVisits failed', err); });
   }
   function renderVisitsGrid(visits){
@@ -1248,7 +1357,56 @@
       return '<option value="'+e.id+'">'+(e.name||'—')+'</option>';
     }).join('');
     if(currentVal && employees.some(function(e){ return String(e.id)===currentVal; })) sel.value = currentVal;
+
+    var aSel = document.getElementById('assignEmpSelect');
+    var aCurrent = aSel.value;
+    aSel.innerHTML = '<option value="">Select employee…</option>' + employees.map(function(e){
+      return '<option value="'+e.id+'">'+(e.name||'—')+'</option>';
+    }).join('');
+    if(aCurrent && employees.some(function(e){ return String(e.id)===aCurrent; })) aSel.value = aCurrent;
   }
+
+  // ---------- Assign task ----------
+  (function(){
+    var dateInput = document.getElementById('assignTaskDate');
+    var todayIso = new Date();
+    dateInput.value = todayIso.getFullYear() + '-' + pad2(todayIso.getMonth()+1) + '-' + pad2(todayIso.getDate());
+  })();
+
+  document.getElementById('assignTaskBtn').addEventListener('click', function(){
+    var empId = document.getElementById('assignEmpSelect').value;
+    var dateStr = document.getElementById('assignTaskDate').value;
+    var text = document.getElementById('assignTaskText').value.trim();
+    var statusEl = document.getElementById('assignTaskStatus');
+    if(!empId){ statusEl.textContent = 'Pick an employee.'; return; }
+    if(!dateStr){ statusEl.textContent = 'Pick a date.'; return; }
+    if(!text){ statusEl.textContent = 'Type the task.'; return; }
+    if(!db){ statusEl.textContent = 'Not connected to Firestore.'; return; }
+
+    var btn = this;
+    btn.disabled = true;
+    statusEl.textContent = 'Assigning…';
+    var docId = 'field_tasks_' + dateStr;
+    ensureAuthReady().then(function(){
+      var ref = db.collection(FS_COLLECTION).doc(docId);
+      return db.runTransaction(function(tx){
+        return tx.get(ref).then(function(doc){
+          var all = {};
+          try{ all = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : {}; }catch(e){ all = {}; }
+          if(!all[empId]) all[empId] = [];
+          all[empId].push({ text: text, done: false, assignedByAdmin: true });
+          tx.set(ref, { value: JSON.stringify(all) });
+        });
+      });
+    }).then(function(){
+      var empName = (employees.filter(function(e){return String(e.id)===String(empId);})[0]||{}).name || 'employee';
+      statusEl.textContent = 'Assigned to ' + empName + ' for ' + dateStr + '.';
+      document.getElementById('assignTaskText').value = '';
+    }).catch(function(err){
+      console.error(err);
+      statusEl.textContent = 'Could not assign — check Anonymous/Email auth is enabled in Firebase.';
+    }).finally(function(){ btn.disabled = false; });
+  });
 
   function monthKeysInRange(fromStr, toStr){
     var from = new Date(fromStr + 'T00:00:00');
