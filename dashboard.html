@@ -527,6 +527,42 @@
         </div>
         <div id="repDeptBars" style="padding:20px;"></div>
       </div>
+
+      <div class="panel" style="margin-top:18px;">
+        <div class="panel-head">
+          <h2>Export reports</h2>
+        </div>
+        <div style="padding:18px 20px;">
+          <div style="display:grid; grid-template-columns:1fr 1fr 1.4fr; gap:10px; margin-bottom:14px;">
+            <div>
+              <div style="font-size:11px; color:var(--slate); margin-bottom:5px;">From date</div>
+              <input id="exportFrom" type="date" style="width:100%; padding:9px 11px; border-radius:9px; border:1px solid var(--line); font-family:inherit; font-size:12.5px;" />
+            </div>
+            <div>
+              <div style="font-size:11px; color:var(--slate); margin-bottom:5px;">To date</div>
+              <input id="exportTo" type="date" style="width:100%; padding:9px 11px; border-radius:9px; border:1px solid var(--line); font-family:inherit; font-size:12.5px;" />
+            </div>
+            <div>
+              <div style="font-size:11px; color:var(--slate); margin-bottom:5px;">Employee</div>
+              <select id="exportEmpSelect" style="width:100%; padding:9px 11px; border-radius:9px; border:1px solid var(--line); font-family:inherit; font-size:12.5px; background:#fff;">
+                <option value="">All employees</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <button id="exportCsvBtn" style="padding:10px 16px; border:none; border-radius:9px; background:linear-gradient(135deg,var(--blue),var(--violet)); color:#fff; font-weight:600; font-size:12.5px; cursor:pointer; white-space:nowrap;">
+              Attendance CSV
+            </button>
+            <button id="exportVisitsCsvBtn" style="padding:10px 16px; border:none; border-radius:9px; background:linear-gradient(135deg,var(--amber),var(--amber-dk)); color:#fff; font-weight:600; font-size:12.5px; cursor:pointer; white-space:nowrap;">
+              Visits CSV (facility &amp; purpose)
+            </button>
+            <button id="exportVisitReportBtn" style="padding:10px 16px; border:none; border-radius:9px; background:linear-gradient(135deg,var(--green),var(--green-dk)); color:#fff; font-weight:600; font-size:12.5px; cursor:pointer; white-space:nowrap;">
+              Visit Report with Photos (HTML)
+            </button>
+          </div>
+          <div id="exportStatus" style="font-size:11.5px; color:var(--slate); margin-top:10px;"></div>
+        </div>
+      </div>
     </div>
 
     <!-- Visit photo lightbox -->
@@ -697,6 +733,7 @@
       }catch(e){ employees = []; }
       renderStats();
       renderRoster();
+      populateExportEmpSelect();
       if(document.getElementById('view-employees').style.display !== 'none') renderEmployeeManageList();
       if(document.getElementById('view-reports').style.display !== 'none') renderReports();
     }, function(err){
@@ -1139,6 +1176,241 @@
       '</div>';
     }).join('');
   }
+
+  // ---------- CSV export ----------
+  function populateExportEmpSelect(){
+    var sel = document.getElementById('exportEmpSelect');
+    var currentVal = sel.value;
+    sel.innerHTML = '<option value="">All employees</option>' + employees.map(function(e){
+      return '<option value="'+e.id+'">'+(e.name||'—')+'</option>';
+    }).join('');
+    if(currentVal && employees.some(function(e){ return String(e.id)===currentVal; })) sel.value = currentVal;
+  }
+
+  function monthKeysInRange(fromStr, toStr){
+    var from = new Date(fromStr + 'T00:00:00');
+    var to = new Date(toStr + 'T00:00:00');
+    var keys = [];
+    var cur = new Date(from.getFullYear(), from.getMonth(), 1);
+    var guard = 0;
+    while(cur <= to && guard < 60){
+      keys.push(cur.getFullYear() + '-' + pad2(cur.getMonth()+1));
+      cur.setMonth(cur.getMonth() + 1);
+      guard++;
+    }
+    return keys;
+  }
+
+  function csvEscape(val){
+    var s = String(val === undefined || val === null ? '' : val);
+    if(/[",\n]/.test(s)) return '"' + s.replace(/"/g,'""') + '"';
+    return s;
+  }
+
+  function statusLabel(c){
+    if(c === 'P') return 'Present';
+    if(c === 'A') return 'Absent';
+    if(c === 'HD') return 'Half day';
+    if(c === 'N') return 'Present';
+    if(!c) return 'Not marked';
+    return c;
+  }
+
+  document.getElementById('exportCsvBtn').addEventListener('click', function(){
+    var from = document.getElementById('exportFrom').value;
+    var to = document.getElementById('exportTo').value;
+    var empFilter = document.getElementById('exportEmpSelect').value;
+    var statusEl = document.getElementById('exportStatus');
+    if(!from || !to){ statusEl.textContent = 'Pick both a from and to date.'; return; }
+    if(to < from){ statusEl.textContent = '"To" date is before "From" date.'; return; }
+    if(!db){ statusEl.textContent = 'Not connected to Firestore.'; return; }
+
+    var btn = this;
+    btn.disabled = true;
+    statusEl.textContent = 'Building report…';
+
+    var monthKeysList = monthKeysInRange(from, to);
+    Promise.all(monthKeysList.map(function(mk){
+      return db.collection(FS_COLLECTION).doc('att_data_' + mk).get().then(function(doc){
+        var data = {};
+        try{ data = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : {}; }catch(e){ data = {}; }
+        return { mk: mk, data: data };
+      });
+    })).then(function(results){
+      var rows = [['Date','Employee','Staff ID','Department','Status','Check-in','Check-out','Distance (km)']];
+      results.forEach(function(r){
+        Object.keys(r.data).forEach(function(empId){
+          if(empFilter && String(empId) !== String(empFilter)) return;
+          var emp = employees.filter(function(e){ return String(e.id) === String(empId); })[0];
+          var empName = emp ? emp.name : ('Employee ' + empId);
+          var empStaffId = emp ? emp.staffId : '';
+          var empDept = emp ? emp.dept : '';
+          var days = r.data[empId];
+          Object.keys(days).forEach(function(day){
+            var dateStr = r.mk + '-' + pad2(parseInt(day,10));
+            if(dateStr < from || dateStr > to) return;
+            var rec = days[day];
+            var c = rec && typeof rec === 'object' ? rec.c : rec;
+            var inT = rec && rec.inT ? timeLabel(new Date(rec.inT)) : '';
+            var outT = rec && rec.outT ? timeLabel(new Date(rec.outT)) : '';
+            var km = rec && rec.km ? rec.km : '';
+            rows.push([dateStr, empName, empStaffId, empDept, statusLabel(c), inT, outT, km]);
+          });
+        });
+      });
+
+      if(rows.length === 1){
+        statusEl.textContent = 'No attendance records found for that range/employee.';
+        btn.disabled = false;
+        return;
+      }
+
+      var csv = rows.map(function(row){ return row.map(csvEscape).join(','); }).join('\r\n');
+      var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      var empLabel = empFilter ? (employees.filter(function(e){return String(e.id)===String(empFilter);})[0]||{}).name || 'employee' : 'all-employees';
+      a.href = url;
+      a.download = 'attendance_' + empLabel.replace(/\s+/g,'-').toLowerCase() + '_' + from + '_to_' + to + '.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      statusEl.textContent = (rows.length - 1) + ' rows exported.';
+      btn.disabled = false;
+    }).catch(function(err){
+      console.error(err);
+      statusEl.textContent = 'Could not build report — check connection.';
+      btn.disabled = false;
+    });
+  });
+
+  function timeLabel(d){ var h=d.getHours(), m=d.getMinutes(); var ap=h>=12?'PM':'AM'; var h12=h%12; if(h12===0)h12=12; return pad2(h12)+':'+pad2(m)+' '+ap; }
+
+  // ---------- Visit exports (facility/purpose CSV + photo report) ----------
+  // Doc IDs are "visit_<YYYY-MM-DD>_<empId>_<random>" — since YYYY-MM-DD sorts
+  // correctly as a string, a documentId() range query from "visit_<from>" up to
+  // "visit_<to>\uf8ff" returns exactly the visits within that date range.
+  function fetchVisitsInRange(from, to, empFilter){
+    var startId = 'visit_' + from;
+    var endId = 'visit_' + to + '\uf8ff';
+    return db.collection(FS_COLLECTION)
+      .where(firebase.firestore.FieldPath.documentId(), '>=', startId)
+      .where(firebase.firestore.FieldPath.documentId(), '<', endId)
+      .get().then(function(snap){
+        var visits = [];
+        snap.forEach(function(doc){
+          try{
+            var v = JSON.parse(doc.data().value);
+            if(!empFilter || String(v.empId) === String(empFilter)) visits.push(v);
+          }catch(e){}
+        });
+        visits.sort(function(a,b){ return a.ts - b.ts; });
+        return visits;
+      });
+  }
+
+  document.getElementById('exportVisitsCsvBtn').addEventListener('click', function(){
+    var from = document.getElementById('exportFrom').value;
+    var to = document.getElementById('exportTo').value;
+    var empFilter = document.getElementById('exportEmpSelect').value;
+    var statusEl = document.getElementById('exportStatus');
+    if(!from || !to){ statusEl.textContent = 'Pick both a from and to date.'; return; }
+    if(to < from){ statusEl.textContent = '"To" date is before "From" date.'; return; }
+    if(!db){ statusEl.textContent = 'Not connected to Firestore.'; return; }
+
+    var btn = this;
+    btn.disabled = true;
+    statusEl.textContent = 'Building visits report…';
+
+    fetchVisitsInRange(from, to, empFilter).then(function(visits){
+      if(visits.length === 0){
+        statusEl.textContent = 'No visits found for that range/employee.';
+        btn.disabled = false;
+        return;
+      }
+      var rows = [['Date','Time','Employee','Facility / Doctor','Purpose of visit','Latitude','Longitude']];
+      visits.forEach(function(v){
+        var t = new Date(v.ts);
+        var dateStr = t.getFullYear() + '-' + pad2(t.getMonth()+1) + '-' + pad2(t.getDate());
+        rows.push([dateStr, timeLabel(t), v.empName || '', v.facility || '', v.purpose || '', v.lat, v.lng]);
+      });
+      var csv = rows.map(function(row){ return row.map(csvEscape).join(','); }).join('\r\n');
+      var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      var empLabel = empFilter ? (employees.filter(function(e){return String(e.id)===String(empFilter);})[0]||{}).name || 'employee' : 'all-employees';
+      a.href = url;
+      a.download = 'visits_' + empLabel.replace(/\s+/g,'-').toLowerCase() + '_' + from + '_to_' + to + '.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      statusEl.textContent = visits.length + ' visits exported.';
+      btn.disabled = false;
+    }).catch(function(err){
+      console.error(err);
+      statusEl.textContent = 'Could not build visits report — check connection.';
+      btn.disabled = false;
+    });
+  });
+
+  document.getElementById('exportVisitReportBtn').addEventListener('click', function(){
+    var from = document.getElementById('exportFrom').value;
+    var to = document.getElementById('exportTo').value;
+    var empFilter = document.getElementById('exportEmpSelect').value;
+    var statusEl = document.getElementById('exportStatus');
+    if(!from || !to){ statusEl.textContent = 'Pick both a from and to date.'; return; }
+    if(to < from){ statusEl.textContent = '"To" date is before "From" date.'; return; }
+    if(!db){ statusEl.textContent = 'Not connected to Firestore.'; return; }
+
+    var btn = this;
+    btn.disabled = true;
+    statusEl.textContent = 'Building photo report… this can take a moment for a large date range.';
+
+    fetchVisitsInRange(from, to, empFilter).then(function(visits){
+      if(visits.length === 0){
+        statusEl.textContent = 'No visits found for that range/employee.';
+        btn.disabled = false;
+        return;
+      }
+      var empLabel = empFilter ? (employees.filter(function(e){return String(e.id)===String(empFilter);})[0]||{}).name || 'Employee' : 'All employees';
+      var cardsHtml = visits.map(function(v){
+        var t = new Date(v.ts);
+        var dateStr = t.getFullYear() + '-' + pad2(t.getMonth()+1) + '-' + pad2(t.getDate());
+        return '<div style="break-inside:avoid; border:1px solid #E7E9F2; border-radius:14px; overflow:hidden; margin-bottom:18px; display:flex; background:#fff;">'+
+          '<img src="'+v.photo+'" style="width:200px; height:200px; object-fit:cover; flex-shrink:0;" />'+
+          '<div style="padding:16px 20px;">'+
+            '<div style="font-family:sans-serif; font-weight:700; font-size:16px; color:#141B3C;">'+(v.facility||'—')+'</div>'+
+            '<div style="font-family:sans-serif; font-size:13px; color:#6B7280; margin-top:4px;">'+(v.purpose||'')+'</div>'+
+            '<div style="font-family:sans-serif; font-size:12px; color:#9CA3AF; margin-top:10px;">'+(v.empName||'')+' &middot; '+dateStr+' at '+timeLabel(t)+'</div>'+
+            '<div style="font-family:monospace; font-size:11px; color:#9CA3AF; margin-top:4px;">'+v.lat.toFixed(5)+', '+v.lng.toFixed(5)+'</div>'+
+          '</div>'+
+        '</div>';
+      }).join('');
+      var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Visit Report</title></head>'+
+        '<body style="background:#F3F5FB; margin:0; padding:32px; font-family:sans-serif;">'+
+        '<h1 style="font-size:22px; color:#141B3C; margin-bottom:2px;">Field Visit Report</h1>'+
+        '<div style="color:#6B7280; font-size:13px; margin-bottom:24px;">'+empLabel+' &middot; '+from+' to '+to+' &middot; '+visits.length+' visits</div>'+
+        cardsHtml +
+        '</body></html>';
+      var blob = new Blob([html], { type: 'text/html;charset=utf-8;' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'visit_report_' + empLabel.replace(/\s+/g,'-').toLowerCase() + '_' + from + '_to_' + to + '.html';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      statusEl.textContent = visits.length + ' visits with photos exported. Open the file in a browser — use Print → Save as PDF if you need a PDF.';
+      btn.disabled = false;
+    }).catch(function(err){
+      console.error(err);
+      statusEl.textContent = 'Could not build photo report — check connection.';
+      btn.disabled = false;
+    });
+  });
 
   if(db){
     loadEmployees();
