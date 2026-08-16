@@ -439,6 +439,27 @@
       </div>
     </div>
 
+    <div class="panel" style="margin-top:18px;">
+      <div class="panel-head">
+        <h2>Field visits today</h2>
+        <div class="date-pill" id="visitsCountPill">0 logged</div>
+      </div>
+      <div id="visitsGrid" style="padding:16px 20px; display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:12px;"></div>
+    </div>
+
+    <!-- Visit photo lightbox -->
+    <div id="visitLightbox" style="display:none; position:fixed; inset:0; background:rgba(20,27,60,.85); z-index:200; align-items:center; justify-content:center; padding:20px;">
+      <div style="background:#fff; border-radius:16px; max-width:420px; width:100%; overflow:hidden;">
+        <img id="lightboxImg" style="width:100%; display:block;" />
+        <div style="padding:16px 18px;">
+          <div style="font-weight:600; font-size:14px; margin-bottom:4px;" id="lightboxFacility">—</div>
+          <div style="font-size:12.5px; color:var(--slate); margin-bottom:2px;" id="lightboxPurpose">—</div>
+          <div style="font-size:11.5px; color:var(--slate-light,#9CA3AF);" id="lightboxMeta">—</div>
+          <button id="lightboxClose" style="margin-top:12px; width:100%; padding:10px; border:none; border-radius:10px; background:var(--bg); color:var(--navy); font-weight:600; font-size:13px; cursor:pointer;">Close</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -456,13 +477,27 @@
   };
   var FS_COLLECTION = 'attendance_app_data';
   var db = null;
+  var authReady = false;
   try{
     firebase.initializeApp(FIREBASE_CONFIG);
     db = firebase.firestore();
-    firebase.auth().signInAnonymously().catch(function(err){ console.error('Anon auth failed', err); });
+    firebase.auth().onAuthStateChanged(function(user){ authReady = !!user; });
+    firebase.auth().signInAnonymously().catch(function(err){
+      console.error('Anon auth failed', err);
+      showBanner('Sign-in failed — approvals/holiday edits may not save. Check Anonymous auth is enabled in Firebase.');
+    });
   }catch(e){
     console.error('Firebase init failed', e);
     showBanner('Could not connect to Firebase — showing sample data only.');
+  }
+  function ensureAuthReady(){
+    if(authReady) return Promise.resolve();
+    return new Promise(function(resolve){
+      var unsub = firebase.auth().onAuthStateChanged(function(user){
+        if(user){ authReady = true; unsub(); resolve(); }
+      });
+      setTimeout(resolve, 4000);
+    });
   }
 
   function showBanner(msg){
@@ -715,15 +750,17 @@
       Array.prototype.forEach.call(host.querySelectorAll('.leave-act'), function(btn){
         btn.addEventListener('click', function(){
           var empId = btn.getAttribute('data-emp'), idx = parseInt(btn.getAttribute('data-idx'),10), status = btn.getAttribute('data-status');
-          var ref = db.collection(FS_COLLECTION).doc('field_leaves');
-          db.runTransaction(function(tx){
-            return tx.get(ref).then(function(doc){
-              var all2 = {};
-              try{ all2 = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : {}; }catch(e){ all2 = {}; }
-              if(all2[empId] && all2[empId][idx]) all2[empId][idx].status = status;
-              tx.set(ref, { value: JSON.stringify(all2) });
+          ensureAuthReady().then(function(){
+            var ref = db.collection(FS_COLLECTION).doc('field_leaves');
+            return db.runTransaction(function(tx){
+              return tx.get(ref).then(function(doc){
+                var all2 = {};
+                try{ all2 = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : {}; }catch(e){ all2 = {}; }
+                if(all2[empId] && all2[empId][idx]) all2[empId][idx].status = status;
+                tx.set(ref, { value: JSON.stringify(all2) });
+              });
             });
-          });
+          }).catch(function(err){ console.error(err); showBanner('Could not update leave — check Anonymous auth is enabled in Firebase.'); });
         });
       });
     });
@@ -746,16 +783,18 @@
       Array.prototype.forEach.call(host.querySelectorAll('.del-holiday'), function(el){
         el.addEventListener('click', function(){
           var i = parseInt(el.getAttribute('data-i'), 10);
-          var ref = db.collection(FS_COLLECTION).doc('att_holidays');
-          db.runTransaction(function(tx){
-            return tx.get(ref).then(function(doc){
-              var list2 = [];
-              try{ list2 = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : []; }catch(e){ list2 = []; }
-              list2.sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
-              list2.splice(i, 1);
-              tx.set(ref, { value: JSON.stringify(list2) });
+          ensureAuthReady().then(function(){
+            var ref = db.collection(FS_COLLECTION).doc('att_holidays');
+            return db.runTransaction(function(tx){
+              return tx.get(ref).then(function(doc){
+                var list2 = [];
+                try{ list2 = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : []; }catch(e){ list2 = []; }
+                list2.sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
+                list2.splice(i, 1);
+                tx.set(ref, { value: JSON.stringify(list2) });
+              });
             });
-          });
+          }).catch(function(err){ console.error(err); showBanner('Could not remove holiday — check Anonymous auth is enabled in Firebase.'); });
         });
       });
     });
@@ -764,18 +803,103 @@
     var date = document.getElementById('holidayDate').value;
     var name = document.getElementById('holidayName').value.trim();
     if(!date || !name) return;
-    var ref = db.collection(FS_COLLECTION).doc('att_holidays');
-    db.runTransaction(function(tx){
-      return tx.get(ref).then(function(doc){
-        var list = [];
-        try{ list = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : []; }catch(e){ list = []; }
-        list.push({ date: date, name: name });
-        tx.set(ref, { value: JSON.stringify(list) });
+    ensureAuthReady().then(function(){
+      var ref = db.collection(FS_COLLECTION).doc('att_holidays');
+      return db.runTransaction(function(tx){
+        return tx.get(ref).then(function(doc){
+          var list = [];
+          try{ list = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : []; }catch(e){ list = []; }
+          list.push({ date: date, name: name });
+          tx.set(ref, { value: JSON.stringify(list) });
+        });
       });
     }).then(function(){
       document.getElementById('holidayDate').value = '';
       document.getElementById('holidayName').value = '';
+    }).catch(function(err){ console.error(err); showBanner('Could not add holiday — check Anonymous auth is enabled in Firebase.'); });
+  });
+
+  // ---------- Field visits (photo + GPS check-ins logged by reps) ----------
+  var visitMarkers = {}; // docId -> L.marker
+  function todayStr(){
+    var d = new Date();
+    return d.getFullYear() + '-' + pad2(d.getMonth()+1) + '-' + pad2(d.getDate());
+  }
+  function makeVisitIcon(){
+    return L.divIcon({
+      className: '',
+      html: '<div style="width:30px; height:30px; border-radius:50% 50% 50% 0; background:linear-gradient(135deg,var(--amber),var(--amber-dk)); transform:rotate(-45deg); display:flex; align-items:center; justify-content:center; box-shadow:0 3px 10px rgba(245,166,35,.45);"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#fff" stroke-width="2.2" style="transform:rotate(45deg);"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div>',
+      iconSize: [30,30], iconAnchor: [15,30]
     });
+  }
+  function loadFieldVisits(){
+    if(!db) return;
+    var prefix = 'visit_' + todayStr() + '_';
+    db.collection(FS_COLLECTION)
+      .where(firebase.firestore.FieldPath.documentId(), '>=', prefix)
+      .where(firebase.firestore.FieldPath.documentId(), '<', prefix + '\uf8ff')
+      .onSnapshot(function(snap){
+        var visits = [];
+        snap.forEach(function(doc){
+          try{ var v = JSON.parse(doc.data().value); v._id = doc.id; visits.push(v); }catch(e){}
+        });
+        visits.sort(function(a,b){ return b.ts - a.ts; });
+        renderVisitsGrid(visits);
+        renderVisitPins(visits);
+        document.getElementById('visitsCountPill').textContent = visits.length + ' logged';
+      }, function(err){ console.error('loadFieldVisits failed', err); });
+  }
+  function renderVisitsGrid(visits){
+    var host = document.getElementById('visitsGrid');
+    if(visits.length === 0){
+      host.innerHTML = '<div style="color:var(--slate); font-size:12.5px; grid-column:1/-1;">No visits logged yet today.</div>';
+      return;
+    }
+    host.innerHTML = visits.map(function(v, i){
+      var t = new Date(v.ts);
+      return '<div class="visit-thumb" data-i="'+i+'" style="cursor:pointer; border-radius:12px; overflow:hidden; border:1px solid var(--line); background:#fff;">'+
+        '<img src="'+v.photo+'" style="width:100%; height:100px; object-fit:cover; display:block;" />'+
+        '<div style="padding:8px 9px;"><div style="font-size:11.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">'+(v.facility||'—')+'</div>'+
+        '<div style="font-size:10.5px; color:var(--slate);">'+(v.empName||'')+' &middot; '+pad2(t.getHours())+':'+pad2(t.getMinutes())+'</div></div></div>';
+    }).join('');
+    Array.prototype.forEach.call(host.querySelectorAll('.visit-thumb'), function(el){
+      el.addEventListener('click', function(){
+        var v = visits[parseInt(el.getAttribute('data-i'),10)];
+        openLightbox(v);
+      });
+    });
+  }
+  function renderVisitPins(visits){
+    var seen = {};
+    visits.forEach(function(v){
+      seen[v._id] = true;
+      var tooltipText = v.facility + ' — ' + v.empName;
+      if(visitMarkers[v._id]){
+        visitMarkers[v._id].setLatLng([v.lat, v.lng]);
+      } else {
+        visitMarkers[v._id] = L.marker([v.lat, v.lng], { icon: makeVisitIcon() })
+          .addTo(leafletMap)
+          .bindTooltip(tooltipText, { className: 'pin-tooltip', direction: 'top', offset: [0,-28] })
+          .on('click', function(){ openLightbox(v); });
+      }
+    });
+    Object.keys(visitMarkers).forEach(function(id){
+      if(!seen[id]){ leafletMap.removeLayer(visitMarkers[id]); delete visitMarkers[id]; }
+    });
+  }
+  function openLightbox(v){
+    var t = new Date(v.ts);
+    document.getElementById('lightboxImg').src = v.photo;
+    document.getElementById('lightboxFacility').textContent = v.facility || '—';
+    document.getElementById('lightboxPurpose').textContent = v.purpose || '';
+    document.getElementById('lightboxMeta').textContent = (v.empName||'') + ' · ' + pad2(t.getHours())+':'+pad2(t.getMinutes());
+    document.getElementById('visitLightbox').style.display = 'flex';
+  }
+  document.getElementById('lightboxClose').addEventListener('click', function(){
+    document.getElementById('visitLightbox').style.display = 'none';
+  });
+  document.getElementById('visitLightbox').addEventListener('click', function(e){
+    if(e.target === this) this.style.display = 'none';
   });
 
   if(db){
@@ -785,6 +909,7 @@
     loadTodayTasks();
     loadLeaveRequests();
     loadHolidaysAdmin();
+    loadFieldVisits();
   }
 })();
 </script>

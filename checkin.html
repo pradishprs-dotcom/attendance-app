@@ -139,7 +139,7 @@
   .section{ padding:20px 18px 0; }
   .section h2{ font-family:'Space Grotesk', sans-serif; font-size:14.5px; font-weight:600; margin-bottom:12px; }
 
-  .stat-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:18px; }
+  .stat-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-bottom:18px; }
   .stat-tile{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px 12px; text-align:center; }
   .stat-tile .icon{
     width:30px; height:30px; border-radius:9px; margin:0 auto 8px;
@@ -285,6 +285,15 @@
     </div>
 
     <div class="section">
+      <button id="logVisitBtn" style="display:none; width:calc(100% - 0px); padding:14px; border:none; border-radius:14px; background:linear-gradient(135deg,var(--green),var(--green-dk)); color:#fff; font-size:14px; font-weight:600; font-family:inherit; display:flex; align-items:center; justify-content:center; gap:8px; cursor:pointer;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        Log a visit
+      </button>
+      <input type="file" id="visitPhotoInput" accept="image/*" capture="environment" style="display:none;" />
+      <div id="visitHint" style="display:none; text-align:center; font-size:11px; color:var(--slate); margin-top:8px;">Check in first to start logging visits.</div>
+    </div>
+
+    <div class="section">
       <h2>Today so far</h2>
       <div class="stat-grid">
         <div class="stat-tile">
@@ -293,6 +302,13 @@
           </div>
           <div class="v" id="statDist">0.0 km</div>
           <div class="l">Distance</div>
+        </div>
+        <div class="stat-tile">
+          <div class="icon" style="background:linear-gradient(135deg,var(--green),var(--green-dk));">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+          </div>
+          <div class="v" id="statVisits">0</div>
+          <div class="l">Visits logged</div>
         </div>
         <div class="stat-tile">
           <div class="icon" style="background:linear-gradient(135deg,var(--green),var(--green-dk));">
@@ -382,6 +398,36 @@
     </div>
   </div>
 
+  <!-- VISIT CAPTURE PANEL -->
+  <div class="overlay-panel" id="visitPanel">
+    <div class="overlay-head">
+      <h2>Log Visit</h2>
+      <div class="close-btn" data-close="visitPanel">&times;</div>
+    </div>
+    <div class="overlay-body">
+      <img id="visitPhotoPreview" style="width:100%; border-radius:14px; margin-bottom:14px; display:none; background:#EEF1FA;" />
+      <div id="visitGpsNote" style="font-size:11.5px; color:var(--slate); margin-bottom:14px; display:flex; align-items:center; gap:6px;">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="var(--green)" stroke-width="2.2"><path d="M12 21s7-6.5 7-11.5A7 7 0 0 0 5 9.5C5 14.5 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.3"/></svg>
+        <span id="visitGpsText">Getting your location…</span>
+      </div>
+      <label class="field-label">Doctor / Facility name</label>
+      <input type="text" id="visitFacility" list="visitFacilityList" placeholder="e.g. Dr. Rao Clinic" style="width:100%; padding:11px 13px; border-radius:10px; border:1px solid var(--line); font-family:inherit; font-size:13px; margin-bottom:12px;" />
+      <datalist id="visitFacilityList"></datalist>
+      <label class="field-label">Purpose of visit</label>
+      <select id="visitPurpose" style="width:100%; padding:11px 13px; border-radius:10px; border:1px solid var(--line); font-family:inherit; font-size:13px; margin-bottom:8px; background:#fff;">
+        <option value="">Select purpose…</option>
+        <option>New product introduction</option>
+        <option>Follow-up visit</option>
+        <option>Sample drop</option>
+        <option>Relationship / courtesy visit</option>
+        <option>Order collection</option>
+        <option value="__other">Other (type below)</option>
+      </select>
+      <input type="text" id="visitPurposeOther" placeholder="Describe purpose..." style="width:100%; padding:11px 13px; border-radius:10px; border:1px solid var(--line); font-family:inherit; font-size:13px; margin-bottom:14px; display:none;" />
+      <button id="saveVisitBtn" class="primary-btn" style="background:linear-gradient(135deg,var(--green),var(--green-dk));">Save visit</button>
+    </div>
+  </div>
+
   <div class="bottom-nav">
     <div class="nav-item active" data-nav="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg><span>Home</span></div>
     <div class="nav-item" data-nav="tasks"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M8 12l2.5 2.5L16 9"/></svg><span>Tasks</span></div>
@@ -404,14 +450,33 @@
   };
   var FS_COLLECTION = 'attendance_app_data';
   var db = null;
+  var authReady = false;
   try{ firebase.initializeApp(FIREBASE_CONFIG); db = firebase.firestore(); }
   catch(e){ console.error('Firebase init failed', e); }
 
   // Sign in anonymously so Firestore rules can require request.auth != null
   // for writes, instead of leaving the database open to anyone with the URL.
+  // authReady gates writes so a fast tap right after page load can't race
+  // ahead of sign-in and get rejected by the security rules.
   try{
-    firebase.auth().signInAnonymously().catch(function(err){ console.error('Anon auth failed', err); });
+    firebase.auth().onAuthStateChanged(function(user){
+      authReady = !!user;
+    });
+    firebase.auth().signInAnonymously().catch(function(err){
+      console.error('Anon auth failed', err);
+      toast('Sign-in failed — writes may not work until this is fixed. (' + (err && err.code || 'unknown error') + ')');
+    });
   }catch(e){ console.error(e); }
+
+  function ensureAuthReady(){
+    if(authReady) return Promise.resolve();
+    return new Promise(function(resolve){
+      var unsub = firebase.auth().onAuthStateChanged(function(user){
+        if(user){ authReady = true; unsub(); resolve(); }
+      });
+      setTimeout(resolve, 4000); // don't block forever if auth is misconfigured
+    });
+  }
 
   var GRADIENTS = ['linear-gradient(135deg,#3B6FF6,#8B5CF6)','linear-gradient(135deg,#F5A623,#F0567A)','linear-gradient(135deg,#2FBE8F,#3B6FF6)','linear-gradient(135deg,#F0567A,#8B5CF6)','linear-gradient(135deg,#8B5CF6,#3B6FF6)'];
 
@@ -513,6 +578,19 @@
       renderCheckState();
       if(checkInTime && !checkOutTime) startWatching(); // resume live tracking if reopened mid-shift
     });
+    loadTodayVisitCount();
+  }
+
+  function loadTodayVisitCount(){
+    if(!db || !currentEmp) return;
+    var prefix = 'visit_' + todayStr() + '_' + currentEmp.id + '_';
+    db.collection(FS_COLLECTION)
+      .where(firebase.firestore.FieldPath.documentId(), '>=', prefix)
+      .where(firebase.firestore.FieldPath.documentId(), '<', prefix + '\uf8ff')
+      .get().then(function(snap){
+        visitsLoggedToday = snap.size;
+        document.getElementById('statVisits').textContent = visitsLoggedToday;
+      }).catch(function(err){ console.error('visit count failed', err); });
   }
 
   function renderCheckState(){
@@ -538,6 +616,7 @@
     var hrs = 0;
     if(checkInTime){ var end = checkOutTime || new Date(); hrs = (end - checkInTime) / 3600000; }
     document.getElementById('statHours').textContent = Math.floor(hrs) + 'h ' + pad2(Math.round((hrs%1)*60)) + 'm';
+    updateLogVisitVisibility();
   }
   setInterval(function(){ if(checkInTime && !checkOutTime) renderCheckState(); }, 30000);
 
@@ -551,34 +630,38 @@
   function writeAttendance(patch){
     // Transaction, not read-then-set — prevents a stray GPS update from
     // overwriting a check-out (or vice versa) if both fire close together.
-    var ref = monthDocRef();
-    return db.runTransaction(function(tx){
-      return tx.get(ref).then(function(doc){
-        var monthData = {};
-        try{ monthData = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : {}; }catch(e){ monthData = {}; }
-        var day = new Date().getDate();
-        if(!monthData[currentEmp.id]) monthData[currentEmp.id] = {};
-        var existing = monthData[currentEmp.id][day] || {};
-        // Once checked out, nothing (e.g. a late GPS tick) may re-add distance or clear outT.
-        if(existing.outT && !patch.outT){ return; }
-        monthData[currentEmp.id][day] = Object.assign({}, existing, patch);
-        tx.set(ref, { value: JSON.stringify(monthData) });
+    return ensureAuthReady().then(function(){
+      var ref = monthDocRef();
+      return db.runTransaction(function(tx){
+        return tx.get(ref).then(function(doc){
+          var monthData = {};
+          try{ monthData = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : {}; }catch(e){ monthData = {}; }
+          var day = new Date().getDate();
+          if(!monthData[currentEmp.id]) monthData[currentEmp.id] = {};
+          var existing = monthData[currentEmp.id][day] || {};
+          // Once checked out, nothing (e.g. a late GPS tick) may re-add distance or clear outT.
+          if(existing.outT && !patch.outT){ return; }
+          monthData[currentEmp.id][day] = Object.assign({}, existing, patch);
+          tx.set(ref, { value: JSON.stringify(monthData) });
+        });
       });
     });
   }
 
   function writeLocation(coords, status){
     if(!db || !currentEmp) return;
-    db.collection(FS_COLLECTION).doc('field_locations').get().then(function(doc){
-      var locs = {};
-      try{ locs = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : {}; }catch(e){ locs = {}; }
-      if(status === 'off'){
-        delete locs[currentEmp.id];
-      } else {
-        locs[currentEmp.id] = { name: currentEmp.name, lat: coords.latitude, lng: coords.longitude, accuracy: coords.accuracy, status: status, ts: Date.now() };
-      }
-      db.collection(FS_COLLECTION).doc('field_locations').set({ value: JSON.stringify(locs) });
-    });
+    ensureAuthReady().then(function(){
+      return db.collection(FS_COLLECTION).doc('field_locations').get().then(function(doc){
+        var locs = {};
+        try{ locs = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : {}; }catch(e){ locs = {}; }
+        if(status === 'off'){
+          delete locs[currentEmp.id];
+        } else {
+          locs[currentEmp.id] = { name: currentEmp.name, lat: coords.latitude, lng: coords.longitude, accuracy: coords.accuracy, status: status, ts: Date.now() };
+        }
+        return db.collection(FS_COLLECTION).doc('field_locations').set({ value: JSON.stringify(locs) });
+      });
+    }).catch(function(err){ console.error('writeLocation failed', err); });
   }
 
   function startWatching(){
@@ -651,12 +734,14 @@
   }
   function saveTasks(){
     if(!db || !currentEmp) return Promise.resolve();
-    return db.collection(FS_COLLECTION).doc(taskDocId()).get().then(function(doc){
-      var all = {};
-      try{ all = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : {}; }catch(e){ all = {}; }
-      all[currentEmp.id] = tasks;
-      return db.collection(FS_COLLECTION).doc(taskDocId()).set({ value: JSON.stringify(all) });
-    });
+    return ensureAuthReady().then(function(){
+      return db.collection(FS_COLLECTION).doc(taskDocId()).get().then(function(doc){
+        var all = {};
+        try{ all = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : {}; }catch(e){ all = {}; }
+        all[currentEmp.id] = tasks;
+        return db.collection(FS_COLLECTION).doc(taskDocId()).set({ value: JSON.stringify(all) });
+      });
+    }).catch(function(err){ console.error('saveTasks failed', err); toast('Could not save task — check connection'); });
   }
   function renderTasks(){
     var host = document.getElementById('taskList');
@@ -731,15 +816,20 @@
     var to = document.getElementById('leaveTo').value || from;
     var reason = document.getElementById('leaveReason').value.trim();
     if(!from){ toast('Pick a start date'); return; }
+    if(to < from){ toast('"To" date is before "From" date'); return; }
     if(!reason){ toast('Add a short reason'); return; }
-    var ref = db.collection(FS_COLLECTION).doc('field_leaves');
-    db.runTransaction(function(tx){
-      return tx.get(ref).then(function(doc){
-        var all = {};
-        try{ all = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : {}; }catch(e){ all = {}; }
-        if(!all[currentEmp.id]) all[currentEmp.id] = [];
-        all[currentEmp.id].push({ from: from, to: to, reason: reason, status: 'pending', appliedAt: Date.now() });
-        tx.set(ref, { value: JSON.stringify(all) });
+    var btn = this;
+    btn.disabled = true;
+    ensureAuthReady().then(function(){
+      var ref = db.collection(FS_COLLECTION).doc('field_leaves');
+      return db.runTransaction(function(tx){
+        return tx.get(ref).then(function(doc){
+          var all = {};
+          try{ all = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : {}; }catch(e){ all = {}; }
+          if(!all[currentEmp.id]) all[currentEmp.id] = [];
+          all[currentEmp.id].push({ from: from, to: to, reason: reason, status: 'pending', appliedAt: Date.now() });
+          tx.set(ref, { value: JSON.stringify(all) });
+        });
       });
     }).then(function(){
       toast('Leave request submitted');
@@ -747,7 +837,11 @@
       document.getElementById('leaveTo').value = '';
       document.getElementById('leaveReason').value = '';
       loadLeaves();
-    }).catch(function(err){ console.error(err); toast('Could not submit — try again'); });
+    }).catch(function(err){
+      console.error(err);
+      var reason2 = (err && err.code) ? (' (' + err.code + ')') : '';
+      toast('Could not submit' + reason2 + ' — check Anonymous auth is enabled in Firebase');
+    }).finally(function(){ btn.disabled = false; });
   });
 
   // ---------- Holidays (read-only; admin adds these from the dashboard) ----------
@@ -783,6 +877,144 @@
         return '<div class="list-card"><div class="row1"><div class="title">'+mLabel+' '+day+'</div><div class="meta">'+(rec.km||0)+' km</div></div><div class="meta">In '+inT+' &middot; Out '+outT+'</div></div>';
       }).join('');
     });
+  }
+
+  // ---------- Visit logging ----------
+  // Doc IDs are named "visit_<YYYY-MM-DD>_<empId>_<random>" inside the SAME
+  // attendance_app_data collection (not a new collection) so the existing
+  // Firestore security rule — which only allows {value: string} documents —
+  // covers this with no changes needed. The date prefix lets the dashboard
+  // pull "today's visits" via a documentId() range query, no index required.
+  var pendingVisit = null; // { lat, lng, photoBase64 }
+
+  function todayStr(){
+    var d = new Date();
+    return d.getFullYear() + '-' + pad2(d.getMonth()+1) + '-' + pad2(d.getDate());
+  }
+
+  function updateLogVisitVisibility(){
+    var btn = document.getElementById('logVisitBtn');
+    var hint = document.getElementById('visitHint');
+    var onDuty = !!(checkInTime && !checkOutTime);
+    btn.style.display = onDuty ? 'flex' : 'none';
+    hint.style.display = onDuty ? 'none' : 'block';
+  }
+
+  document.getElementById('logVisitBtn').addEventListener('click', function(){
+    if(!(checkInTime && !checkOutTime)){ toast('Check in first to log a visit'); return; }
+    document.getElementById('visitPhotoInput').click();
+  });
+
+  document.getElementById('visitPhotoInput').addEventListener('change', function(e){
+    var file = e.target.files && e.target.files[0];
+    if(!file) return;
+    var reader = new FileReader();
+    reader.onload = function(ev){
+      var img = new Image();
+      img.onload = function(){
+        var compressed = compressImage(img);
+        pendingVisit = { lat: null, lng: null, photoBase64: compressed };
+        document.getElementById('visitPhotoPreview').src = compressed;
+        document.getElementById('visitPhotoPreview').style.display = 'block';
+        document.getElementById('visitGpsText').textContent = 'Getting your location…';
+        openPanel('visitPanel');
+        populateFacilityList();
+        navigator.geolocation.getCurrentPosition(function(pos){
+          pendingVisit.lat = pos.coords.latitude;
+          pendingVisit.lng = pos.coords.longitude;
+          document.getElementById('visitGpsText').textContent = 'Location captured (±' + Math.round(pos.coords.accuracy) + 'm)';
+        }, function(err){
+          document.getElementById('visitGpsText').textContent = 'Could not get location — try again';
+          console.error(err);
+        }, { enableHighAccuracy:true, timeout:15000 });
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+    e.target.value = ''; // allow re-selecting the same file next time
+  });
+
+  function compressImage(img){
+    var maxW = 640;
+    var scale = Math.min(1, maxW / img.width);
+    var w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+    var canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+    var quality = 0.6;
+    var out = canvas.toDataURL('image/jpeg', quality);
+    // Keep shrinking quality until safely under ~350KB base64, so the whole
+    // Firestore document (photo + a few text fields) stays well under 1MB.
+    while(out.length > 350000 && quality > 0.25){
+      quality -= 0.1;
+      out = canvas.toDataURL('image/jpeg', quality);
+    }
+    return out;
+  }
+
+  function populateFacilityList(){
+    var host = document.getElementById('visitFacilityList');
+    var saved = [];
+    try{ saved = JSON.parse(localStorage.getItem('field_visit_facilities') || '[]'); }catch(e){ saved = []; }
+    host.innerHTML = saved.map(function(name){ return '<option value="'+name.replace(/"/g,'&quot;')+'">'; }).join('');
+  }
+  function rememberFacility(name){
+    var saved = [];
+    try{ saved = JSON.parse(localStorage.getItem('field_visit_facilities') || '[]'); }catch(e){ saved = []; }
+    saved = saved.filter(function(n){ return n !== name; });
+    saved.unshift(name);
+    localStorage.setItem('field_visit_facilities', JSON.stringify(saved.slice(0, 30)));
+  }
+
+  document.getElementById('visitPurpose').addEventListener('change', function(){
+    document.getElementById('visitPurposeOther').style.display = this.value === '__other' ? 'block' : 'none';
+  });
+
+  document.getElementById('saveVisitBtn').addEventListener('click', function(){
+    if(!(checkInTime && !checkOutTime)){ toast('You are not checked in'); closePanel('visitPanel'); return; }
+    if(!pendingVisit || !pendingVisit.photoBase64){ toast('No photo captured'); return; }
+    if(pendingVisit.lat === null){ toast('Still getting location — wait a moment'); return; }
+    var facility = document.getElementById('visitFacility').value.trim();
+    var purposeSel = document.getElementById('visitPurpose').value;
+    var purpose = purposeSel === '__other' ? document.getElementById('visitPurposeOther').value.trim() : purposeSel;
+    if(!facility){ toast('Add the doctor/facility name'); return; }
+    if(!purpose){ toast('Select or describe the purpose'); return; }
+
+    var btn = this;
+    btn.disabled = true;
+    var docId = 'visit_' + todayStr() + '_' + currentEmp.id + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+    var record = {
+      empId: currentEmp.id,
+      empName: currentEmp.name,
+      lat: pendingVisit.lat,
+      lng: pendingVisit.lng,
+      facility: facility,
+      purpose: purpose,
+      photo: pendingVisit.photoBase64,
+      ts: Date.now()
+    };
+    ensureAuthReady().then(function(){
+      return db.collection(FS_COLLECTION).doc(docId).set({ value: JSON.stringify(record) });
+    }).then(function(){
+      rememberFacility(facility);
+      toast('Visit logged');
+      closePanel('visitPanel');
+      document.getElementById('visitFacility').value = '';
+      document.getElementById('visitPurpose').value = '';
+      document.getElementById('visitPurposeOther').value = '';
+      document.getElementById('visitPurposeOther').style.display = 'none';
+      pendingVisit = null;
+      bumpVisitCount();
+    }).catch(function(err){
+      console.error(err);
+      toast('Could not save visit — check connection');
+    }).finally(function(){ btn.disabled = false; });
+  });
+
+  var visitsLoggedToday = 0;
+  function bumpVisitCount(){
+    visitsLoggedToday++;
+    document.getElementById('statVisits').textContent = visitsLoggedToday;
   }
 
   // ---------- Boot ----------
