@@ -244,8 +244,18 @@
 
 <div class="app">
 
+  <!-- ACCESS CODE GATE -->
+  <div id="accessGate" style="display:flex; flex-direction:column; padding:60px 26px; min-height:100vh; justify-content:center;">
+    <div class="brand" style="margin:0 auto 20px;">FO</div>
+    <h1 style="text-align:center;">Field Ops access code</h1>
+    <p style="text-align:center;">Ask your office for the staff access code to continue.</p>
+    <input id="accessCodeInput" type="tel" inputmode="numeric" placeholder="Access code" style="width:100%; padding:13px 16px; border-radius:12px; border:1px solid var(--line); background:var(--card); font-size:16px; text-align:center; letter-spacing:3px; margin:18px 0 12px;" />
+    <button id="accessCodeSubmit" style="width:100%; padding:13px; border:none; border-radius:14px; background:linear-gradient(135deg,var(--blue),var(--violet)); color:#fff; font-size:14.5px; font-weight:600; font-family:inherit; cursor:pointer;">Continue</button>
+    <div id="accessCodeError" style="display:none; color:var(--pink-dk); font-size:12px; text-align:center; margin-top:12px;">Incorrect code — try again.</div>
+  </div>
+
   <!-- LOGIN / IDENTIFY -->
-  <div id="loginScreen">
+  <div id="loginScreen" style="display:none;">
     <div class="brand">FO</div>
     <h1>Who's checking in?</h1>
     <p>Pick your name to open your field check-in.</p>
@@ -1017,12 +1027,42 @@
     document.getElementById('statVisits').textContent = visitsLoggedToday;
   }
 
-  // ---------- Boot ----------
-  loadEmployees(function(){
-    renderEmpList('');
-    var savedId = localStorage.getItem('field_emp_id');
-    if(savedId){ selectEmployee(savedId); }
+  // ---------- Access code gate ----------
+  // Shared code for all field staff — not per-person security, just keeps
+  // random visitors from opening the app. Change this constant to update it,
+  // then re-upload the file.
+  var ACCESS_CODE = '0000';
+
+  function enterApp(){
+    document.getElementById('accessGate').style.display = 'none';
+    document.getElementById('loginScreen').style.display = 'flex';
+    loadEmployees(function(){
+      renderEmpList('');
+      var savedId = localStorage.getItem('field_emp_id');
+      if(savedId){ selectEmployee(savedId); }
+    });
+  }
+
+  document.getElementById('accessCodeSubmit').addEventListener('click', function(){
+    var val = document.getElementById('accessCodeInput').value.trim();
+    var errEl = document.getElementById('accessCodeError');
+    if(val === ACCESS_CODE){
+      localStorage.setItem('field_access_ok', 'true');
+      errEl.style.display = 'none';
+      enterApp();
+    } else {
+      errEl.style.display = 'block';
+    }
   });
+  document.getElementById('accessCodeInput').addEventListener('keydown', function(e){
+    if(e.key === 'Enter') document.getElementById('accessCodeSubmit').click();
+  });
+
+  // ---------- Boot ----------
+  if(localStorage.getItem('field_access_ok') === 'true'){
+    enterApp();
+  }
+  // else: accessGate stays visible (its default state) until the code is entered.
 
   if('serviceWorker' in navigator){
     navigator.serviceWorker.register('sw.js').catch(function(err){ console.warn('SW registration failed', err); });

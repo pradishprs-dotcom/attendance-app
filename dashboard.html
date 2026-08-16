@@ -281,6 +281,28 @@
 </head>
 <body>
 
+<!-- LOGIN SCREEN -->
+<div id="loginScreen" style="min-height:100vh; display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg,#141B3C,#1F2A54);">
+  <div style="width:100%; max-width:360px; background:#fff; border-radius:18px; padding:36px 32px; box-shadow:0 20px 50px rgba(0,0,0,.3);">
+    <div style="width:44px; height:44px; border-radius:12px; background:linear-gradient(135deg,#3B6FF6,#8B5CF6); display:flex; align-items:center; justify-content:center; color:#fff; font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:16px; margin-bottom:20px;">FO</div>
+    <h1 style="font-family:'Space Grotesk',sans-serif; font-size:20px; color:#141B3C; margin-bottom:4px;">Admin sign in</h1>
+    <p style="font-size:12.5px; color:#6B7280; margin-bottom:22px;">Field Ops Dashboard — authorized staff only.</p>
+    <div style="margin-bottom:12px;">
+      <div style="font-size:11px; color:#6B7280; margin-bottom:5px;">Email</div>
+      <input id="loginEmail" type="email" placeholder="you@company.com" style="width:100%; padding:11px 13px; border-radius:10px; border:1px solid #E7E9F2; font-family:inherit; font-size:13px;" />
+    </div>
+    <div style="margin-bottom:18px;">
+      <div style="font-size:11px; color:#6B7280; margin-bottom:5px;">Password</div>
+      <input id="loginPassword" type="password" placeholder="••••••••" style="width:100%; padding:11px 13px; border-radius:10px; border:1px solid #E7E9F2; font-family:inherit; font-size:13px;" />
+    </div>
+    <button id="loginSubmitBtn" style="width:100%; padding:13px; border:none; border-radius:12px; background:linear-gradient(135deg,#3B6FF6,#8B5CF6); color:#fff; font-weight:600; font-size:14px; font-family:inherit; cursor:pointer;">Sign in</button>
+    <div id="loginError" style="color:#D53A5E; font-size:12px; margin-top:12px; display:none;"></div>
+  </div>
+</div>
+
+<!-- DASHBOARD APP SHELL (hidden until signed in) -->
+<div id="appShell" style="display:none;">
+
 <div class="sidebar">
   <div class="logo">FO</div>
   <div class="nav-item active" title="Dashboard" data-view="overview">
@@ -318,7 +340,9 @@
     </div>
     <div class="topbar-right">
       <div class="bell"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 8a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6"/><path d="M10 20a2 2 0 0 0 4 0"/></svg></div>
-      <div class="avatar">RG</div>
+      <div id="signOutBtn" title="Sign out" style="width:34px; height:34px; border-radius:50%; background:#FDE8EC; color:#D53A5E; display:flex; align-items:center; justify-content:center; cursor:pointer;">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+      </div>
     </div>
   </div>
 
@@ -586,6 +610,8 @@
   </div>
 </div>
 
+</div><!-- /appShell -->
+
 <script>
 (function(){
   // Same Firebase project + storage convention as your attendance-app
@@ -601,18 +627,50 @@
   var FS_COLLECTION = 'attendance_app_data';
   var db = null;
   var authReady = false;
+  var dashboardBooted = false;
   try{
     firebase.initializeApp(FIREBASE_CONFIG);
     db = firebase.firestore();
-    firebase.auth().onAuthStateChanged(function(user){ authReady = !!user; });
-    firebase.auth().signInAnonymously().catch(function(err){
-      console.error('Anon auth failed', err);
-      showBanner('Sign-in failed — approvals/holiday edits may not save. Check Anonymous auth is enabled in Firebase.');
-    });
   }catch(e){
     console.error('Firebase init failed', e);
     showBanner('Could not connect to Firebase — showing sample data only.');
   }
+
+  // Real admin login required — anonymous sessions (if any exist elsewhere in
+  // the app) do NOT get into the dashboard. Only accounts created in
+  // Firebase Console → Authentication → Users can sign in here.
+  firebase.auth().onAuthStateChanged(function(user){
+    authReady = !!user;
+    var isRealAdmin = user && !user.isAnonymous;
+    document.getElementById('loginScreen').style.display = isRealAdmin ? 'none' : 'flex';
+    document.getElementById('appShell').style.display = isRealAdmin ? 'block' : 'none';
+    if(isRealAdmin && !dashboardBooted){
+      dashboardBooted = true;
+      bootDashboard();
+    }
+  });
+
+  document.getElementById('loginSubmitBtn').addEventListener('click', function(){
+    var email = document.getElementById('loginEmail').value.trim();
+    var pass = document.getElementById('loginPassword').value;
+    var errEl = document.getElementById('loginError');
+    errEl.style.display = 'none';
+    if(!email || !pass){ errEl.textContent = 'Enter both email and password.'; errEl.style.display = 'block'; return; }
+    var btn = this;
+    btn.disabled = true;
+    firebase.auth().signInWithEmailAndPassword(email, pass).catch(function(err){
+      console.error(err);
+      errEl.textContent = 'Sign-in failed: ' + (err && err.message ? err.message : 'check your email and password.');
+      errEl.style.display = 'block';
+    }).finally(function(){ btn.disabled = false; });
+  });
+  document.getElementById('loginPassword').addEventListener('keydown', function(e){
+    if(e.key === 'Enter') document.getElementById('loginSubmitBtn').click();
+  });
+  document.getElementById('signOutBtn').addEventListener('click', function(){
+    firebase.auth().signOut();
+  });
+
   function ensureAuthReady(){
     if(authReady) return Promise.resolve();
     return new Promise(function(resolve){
@@ -1417,7 +1475,8 @@
     });
   });
 
-  if(db){
+  function bootDashboard(){
+    if(!db) return;
     loadEmployees();
     loadTodayAttendance();
     loadLiveLocations();
