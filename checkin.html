@@ -8,6 +8,13 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#141B3C" />
+<link rel="apple-touch-icon" href="icon-192.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Field Ops" />
 <style>
   :root{
     --navy:#141B3C;
@@ -189,6 +196,48 @@
     z-index:50; max-width:80%; text-align:center;
   }
   #toast.show{ opacity:1; }
+
+  /* Overlay panels: Leaves / Holidays / History */
+  .overlay-panel{
+    position:fixed; inset:0; background:var(--bg); z-index:60;
+    display:none; flex-direction:column;
+    max-width:430px; margin:0 auto;
+  }
+  .overlay-panel.show{ display:flex; }
+  .overlay-head{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:18px 20px; background:var(--card); border-bottom:1px solid var(--line);
+  }
+  .overlay-head h2{ font-family:'Space Grotesk', sans-serif; font-size:17px; }
+  .close-btn{
+    width:32px; height:32px; border-radius:50%; background:var(--bg);
+    display:flex; align-items:center; justify-content:center;
+    font-size:20px; color:var(--slate); cursor:pointer; line-height:1;
+  }
+  .overlay-body{ flex:1; overflow-y:auto; padding:18px 20px 30px; }
+  .field-label{ font-size:11.5px; color:var(--slate); display:block; margin-bottom:5px; }
+  .leave-form input[type="date"], .leave-form input[type="text"]{
+    width:100%; padding:11px 13px; border-radius:10px; border:1px solid var(--line);
+    font-family:inherit; font-size:13px; background:var(--card);
+  }
+  .primary-btn{
+    width:100%; padding:13px; border:none; border-radius:12px;
+    background:linear-gradient(135deg, var(--blue), var(--violet)); color:#fff;
+    font-weight:600; font-size:14px; font-family:inherit; cursor:pointer;
+  }
+  .sub-h{ font-family:'Space Grotesk', sans-serif; font-size:13.5px; font-weight:600; margin:22px 0 10px; color:var(--slate); }
+  .list-card{
+    background:var(--card); border:1px solid var(--line); border-radius:12px;
+    padding:13px 15px; margin-bottom:9px;
+  }
+  .list-card .row1{ display:flex; align-items:center; justify-content:space-between; margin-bottom:3px; }
+  .list-card .title{ font-weight:600; font-size:13.5px; }
+  .list-card .meta{ font-size:11.5px; color:var(--slate); }
+  .status-chip{ font-size:10.5px; font-weight:600; padding:3px 9px; border-radius:20px; }
+  .status-chip.pending{ background:#FFF3E0; color:var(--amber-dk); }
+  .status-chip.approved{ background:#E4F9F1; color:var(--green-dk); }
+  .status-chip.rejected{ background:#FDE8EC; color:var(--pink-dk); }
+  .empty-note{ color:var(--slate); font-size:12.5px; padding:6px 2px 14px; }
 </style>
 </head>
 <body>
@@ -270,13 +319,74 @@
         <button id="addTaskBtn">Add</button>
       </div>
     </div>
+
+    <div class="section">
+      <h2>More</h2>
+      <div class="quick-tiles">
+        <div class="quick-tile" id="openLeaves" style="background:linear-gradient(135deg,var(--violet),var(--violet-dk,#6D3FE0));">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+          My Leaves
+        </div>
+        <div class="quick-tile" id="openHolidays" style="background:linear-gradient(135deg,var(--amber),var(--amber-dk));">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+          Holidays
+        </div>
+        <div class="quick-tile" id="openHistory" style="background:linear-gradient(135deg,var(--pink),var(--pink-dk));">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>
+          History
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LEAVES PANEL -->
+  <div class="overlay-panel" id="leavesPanel">
+    <div class="overlay-head">
+      <h2>My Leaves</h2>
+      <div class="close-btn" data-close="leavesPanel">&times;</div>
+    </div>
+    <div class="overlay-body">
+      <div class="leave-form">
+        <div style="display:flex; gap:8px; margin-bottom:8px;">
+          <div style="flex:1;"><label class="field-label">From</label><input type="date" id="leaveFrom" /></div>
+          <div style="flex:1;"><label class="field-label">To</label><input type="date" id="leaveTo" /></div>
+        </div>
+        <label class="field-label">Reason</label>
+        <input type="text" id="leaveReason" placeholder="e.g. Family function" style="margin-bottom:10px;" />
+        <button id="applyLeaveBtn" class="primary-btn">Apply for leave</button>
+      </div>
+      <h3 class="sub-h">Past requests</h3>
+      <div id="leaveList"></div>
+    </div>
+  </div>
+
+  <!-- HOLIDAYS PANEL -->
+  <div class="overlay-panel" id="holidaysPanel">
+    <div class="overlay-head">
+      <h2>Holidays</h2>
+      <div class="close-btn" data-close="holidaysPanel">&times;</div>
+    </div>
+    <div class="overlay-body">
+      <div id="holidayList"></div>
+    </div>
+  </div>
+
+  <!-- HISTORY PANEL -->
+  <div class="overlay-panel" id="historyPanel">
+    <div class="overlay-head">
+      <h2>Attendance History</h2>
+      <div class="close-btn" data-close="historyPanel">&times;</div>
+    </div>
+    <div class="overlay-body">
+      <div id="historyList"></div>
+    </div>
   </div>
 
   <div class="bottom-nav">
-    <div class="nav-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg><span>Home</span></div>
-    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M8 12l2.5 2.5L16 9"/></svg><span>Tasks</span></div>
-    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span>Attendance</span></div>
-    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20c1.5-4 4.5-6 7.5-6s6 2 7.5 6"/></svg><span>Profile</span></div>
+    <div class="nav-item active" data-nav="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg><span>Home</span></div>
+    <div class="nav-item" data-nav="tasks"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M8 12l2.5 2.5L16 9"/></svg><span>Tasks</span></div>
+    <div class="nav-item" id="navAttendance"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span>Attendance</span></div>
+    <div class="nav-item" data-nav="profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20c1.5-4 4.5-6 7.5-6s6 2 7.5 6"/></svg><span>Profile</span></div>
   </div>
 
   <div id="toast"></div>
@@ -296,6 +406,12 @@
   var db = null;
   try{ firebase.initializeApp(FIREBASE_CONFIG); db = firebase.firestore(); }
   catch(e){ console.error('Firebase init failed', e); }
+
+  // Sign in anonymously so Firestore rules can require request.auth != null
+  // for writes, instead of leaving the database open to anyone with the URL.
+  try{
+    firebase.auth().signInAnonymously().catch(function(err){ console.error('Anon auth failed', err); });
+  }catch(e){ console.error(e); }
 
   var GRADIENTS = ['linear-gradient(135deg,#3B6FF6,#8B5CF6)','linear-gradient(135deg,#F5A623,#F0567A)','linear-gradient(135deg,#2FBE8F,#3B6FF6)','linear-gradient(135deg,#F0567A,#8B5CF6)','linear-gradient(135deg,#8B5CF6,#3B6FF6)'];
 
@@ -581,12 +697,104 @@
     saveTasks();
   }
 
+  // ---------- Panels: open/close ----------
+  function openPanel(id){ document.getElementById(id).classList.add('show'); }
+  function closePanel(id){ document.getElementById(id).classList.remove('show'); }
+  Array.prototype.forEach.call(document.querySelectorAll('[data-close]'), function(btn){
+    btn.addEventListener('click', function(){ closePanel(btn.getAttribute('data-close')); });
+  });
+  document.getElementById('openLeaves').addEventListener('click', function(){ openPanel('leavesPanel'); loadLeaves(); });
+  document.getElementById('openHolidays').addEventListener('click', function(){ openPanel('holidaysPanel'); loadHolidays(); });
+  document.getElementById('openHistory').addEventListener('click', function(){ openPanel('historyPanel'); loadHistory(); });
+  document.getElementById('navAttendance').addEventListener('click', function(){ openPanel('historyPanel'); loadHistory(); });
+
+  // ---------- Leaves ----------
+  function loadLeaves(){
+    if(!db || !currentEmp) return;
+    db.collection(FS_COLLECTION).doc('field_leaves').get().then(function(doc){
+      var all = {};
+      try{ all = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : {}; }catch(e){ all = {}; }
+      var mine = (all[currentEmp.id] || []).slice().reverse();
+      var host = document.getElementById('leaveList');
+      if(mine.length === 0){
+        host.innerHTML = '<div class="empty-note">No leave requests yet.</div>';
+        return;
+      }
+      host.innerHTML = mine.map(function(l){
+        return '<div class="list-card"><div class="row1"><div class="title">'+l.from+(l.to && l.to!==l.from ? ' → '+l.to : '')+'</div><span class="status-chip '+(l.status||'pending')+'">'+(l.status||'pending')+'</span></div><div class="meta">'+(l.reason||'')+'</div></div>';
+      }).join('');
+    });
+  }
+  document.getElementById('applyLeaveBtn').addEventListener('click', function(){
+    if(!currentEmp) return;
+    var from = document.getElementById('leaveFrom').value;
+    var to = document.getElementById('leaveTo').value || from;
+    var reason = document.getElementById('leaveReason').value.trim();
+    if(!from){ toast('Pick a start date'); return; }
+    if(!reason){ toast('Add a short reason'); return; }
+    var ref = db.collection(FS_COLLECTION).doc('field_leaves');
+    db.runTransaction(function(tx){
+      return tx.get(ref).then(function(doc){
+        var all = {};
+        try{ all = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : {}; }catch(e){ all = {}; }
+        if(!all[currentEmp.id]) all[currentEmp.id] = [];
+        all[currentEmp.id].push({ from: from, to: to, reason: reason, status: 'pending', appliedAt: Date.now() });
+        tx.set(ref, { value: JSON.stringify(all) });
+      });
+    }).then(function(){
+      toast('Leave request submitted');
+      document.getElementById('leaveFrom').value = '';
+      document.getElementById('leaveTo').value = '';
+      document.getElementById('leaveReason').value = '';
+      loadLeaves();
+    }).catch(function(err){ console.error(err); toast('Could not submit — try again'); });
+  });
+
+  // ---------- Holidays (read-only; admin adds these from the dashboard) ----------
+  function loadHolidays(){
+    if(!db) return;
+    db.collection(FS_COLLECTION).doc('att_holidays').get().then(function(doc){
+      var list = [];
+      try{ list = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : []; }catch(e){ list = []; }
+      var host = document.getElementById('holidayList');
+      if(list.length === 0){ host.innerHTML = '<div class="empty-note">No holidays added yet.</div>'; return; }
+      list.sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
+      host.innerHTML = list.map(function(h){
+        return '<div class="list-card"><div class="row1"><div class="title">'+(h.name||'Holiday')+'</div></div><div class="meta">'+(h.date||'')+'</div></div>';
+      }).join('');
+    });
+  }
+
+  // ---------- Attendance history (last 10 marked days) ----------
+  function loadHistory(){
+    if(!db || !currentEmp) return;
+    monthDocRef().get().then(function(doc){
+      var monthData = {};
+      try{ monthData = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : {}; }catch(e){ monthData = {}; }
+      var mine = monthData[currentEmp.id] || {};
+      var days = Object.keys(mine).map(Number).sort(function(a,b){ return b-a; });
+      var host = document.getElementById('historyList');
+      if(days.length === 0){ host.innerHTML = '<div class="empty-note">No attendance recorded yet this month.</div>'; return; }
+      var mLabel = new Date().toLocaleString('en-US', { month: 'short' });
+      host.innerHTML = days.slice(0, 15).map(function(day){
+        var rec = mine[day];
+        var inT = rec.inT ? timeLabel(new Date(rec.inT)) : '--:--';
+        var outT = rec.outT ? timeLabel(new Date(rec.outT)) : '--:--';
+        return '<div class="list-card"><div class="row1"><div class="title">'+mLabel+' '+day+'</div><div class="meta">'+(rec.km||0)+' km</div></div><div class="meta">In '+inT+' &middot; Out '+outT+'</div></div>';
+      }).join('');
+    });
+  }
+
   // ---------- Boot ----------
   loadEmployees(function(){
     renderEmpList('');
     var savedId = localStorage.getItem('field_emp_id');
     if(savedId){ selectEmployee(savedId); }
   });
+
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('sw.js').catch(function(err){ console.warn('SW registration failed', err); });
+  }
 })();
 </script>
 

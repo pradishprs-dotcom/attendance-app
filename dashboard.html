@@ -8,6 +8,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
   :root{
     --navy:#141B3C;
@@ -183,18 +186,19 @@
   }
 
   /* Map */
-  .map-wrap{ position:relative; height:430px; background:linear-gradient(180deg, #EDF1FB, #E7ECFA); overflow:hidden; }
-  .map-svg{ width:100%; height:100%; display:block; }
-  .pin{ position:absolute; transform:translate(-50%, -100%); cursor:pointer; }
-  .pin .ping{
-    position:absolute; top:22px; left:50%;
+  .map-wrap{ position:relative; height:430px; background:#EDF1FB; overflow:hidden; }
+  #leafletMap{ width:100%; height:100%; }
+  .leaflet-container{ font-family:'IBM Plex Sans', sans-serif; background:#EDF1FB; }
+  .pin-marker{ position:relative; width:32px; height:32px; }
+  .pin-marker .ping{
+    position:absolute; top:16px; left:16px;
     width:14px; height:14px; margin-left:-7px; margin-top:-7px;
     border-radius:50%; background:var(--green); opacity:.4;
     animation:ping 2.2s ease-out infinite;
   }
-  .pin.busy .ping{ background:var(--blue); }
+  .pin-marker.busy .ping{ background:var(--blue); }
   @keyframes ping{ 0%{ transform:scale(0.5); opacity:.5; } 100%{ transform:scale(2.8); opacity:0; } }
-  .pin .head{
+  .pin-marker .head{
     width:32px; height:32px; border-radius:50% 50% 50% 0;
     background:linear-gradient(135deg, var(--blue), var(--violet));
     transform:rotate(-45deg);
@@ -202,18 +206,16 @@
     box-shadow:0 3px 10px rgba(59,111,246,.4);
     position:relative;
   }
-  .pin.busy .head{ background:linear-gradient(135deg, var(--green), var(--green-dk)); box-shadow:0 3px 10px rgba(47,190,143,.4); }
-  .pin .head .init{ transform:rotate(45deg); color:#fff; font-size:10.5px; font-weight:700; font-family:'Space Grotesk', sans-serif; }
-  .pin .label{
-    position:absolute; top:-27px; left:50%; transform:translateX(-50%);
-    background:var(--navy); color:#fff; font-size:11px;
-    padding:4px 10px; border-radius:7px; white-space:nowrap;
-    opacity:0; pointer-events:none; transition:opacity .12s;
-    font-family:'IBM Plex Mono', monospace;
+  .pin-marker.busy .head{ background:linear-gradient(135deg, var(--green), var(--green-dk)); box-shadow:0 3px 10px rgba(47,190,143,.4); }
+  .pin-marker .head .init{ transform:rotate(45deg); color:#fff; font-size:10.5px; font-weight:700; font-family:'Space Grotesk', sans-serif; }
+  .leaflet-tooltip.pin-tooltip{
+    background:var(--navy); color:#fff; border:none; font-size:11px;
+    padding:4px 10px; border-radius:7px; font-family:'IBM Plex Mono', monospace;
+    box-shadow:none;
   }
-  .pin:hover .label{ opacity:1; }
+  .leaflet-tooltip.pin-tooltip::before{ display:none; }
   .map-search{
-    position:absolute; top:16px; left:16px;
+    position:absolute; top:16px; left:16px; z-index:1000;
     background:var(--card); border:1px solid var(--line); border-radius:10px;
     padding:10px 15px; font-size:12.5px; color:var(--slate);
     display:flex; align-items:center; gap:8px; width:230px;
@@ -221,7 +223,7 @@
   }
   .map-search svg{width:14px; height:14px;}
   .map-legend{
-    position:absolute; bottom:16px; left:16px;
+    position:absolute; bottom:16px; left:16px; z-index:1000;
     background:var(--card); border:1px solid var(--line); border-radius:10px;
     padding:9px 14px; font-size:11.5px; color:var(--slate);
     display:flex; gap:16px;
@@ -354,31 +356,12 @@
           <div class="date-pill" id="mapStatusPill">Waiting for check-ins&hellip;</div>
         </div>
         <div class="map-wrap">
-          <svg class="map-svg" viewBox="0 0 700 420" preserveAspectRatio="xMidYMid slice">
-            <rect width="700" height="420" fill="#EDF1FB"/>
-            <g stroke="#DDE4F7" stroke-width="10">
-              <line x1="0" y1="90" x2="700" y2="90"/>
-              <line x1="0" y1="220" x2="700" y2="200"/>
-              <line x1="0" y1="350" x2="700" y2="330"/>
-            </g>
-            <g stroke="#DDE4F7" stroke-width="8">
-              <line x1="120" y1="0" x2="150" y2="420"/>
-              <line x1="330" y1="0" x2="360" y2="420"/>
-              <line x1="540" y1="0" x2="510" y2="420"/>
-            </g>
-            <g stroke="#CBD5F5" stroke-width="1.4" fill="none" opacity="0.8">
-              <circle cx="230" cy="150" r="60"/>
-              <circle cx="480" cy="260" r="80"/>
-            </g>
-            <text x="24" y="40" font-family="IBM Plex Mono, monospace" font-size="12" fill="#A7B2DA" letter-spacing="2">HYDERABAD</text>
-          </svg>
+          <div id="leafletMap"></div>
 
           <div class="map-search">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-            Search employee
+            <input id="mapSearchInput" type="text" placeholder="Search employee" style="border:none; outline:none; background:transparent; font-family:inherit; font-size:12.5px; width:100%; color:var(--navy);" />
           </div>
-
-          <div id="mapPins"></div>
 
           <div class="map-legend">
             <span><span class="dot" style="background:var(--green);"></span>On duty</span>
@@ -432,6 +415,30 @@
       <div id="rosterBody"></div>
     </div>
 
+    <div class="grid-main" style="margin-top:18px;">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Pending leave requests</h2>
+          <div class="date-pill" id="leaveCountPill">0 pending</div>
+        </div>
+        <div id="leaveRequestsBody" style="padding:8px 20px 18px;"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Holidays</h2>
+        </div>
+        <div style="padding:16px 20px;">
+          <div style="display:flex; gap:8px; margin-bottom:12px;">
+            <input id="holidayDate" type="date" style="flex:1; padding:9px 11px; border-radius:9px; border:1px solid var(--line); font-family:inherit; font-size:12.5px;" />
+            <input id="holidayName" type="text" placeholder="Name" style="flex:1; padding:9px 11px; border-radius:9px; border:1px solid var(--line); font-family:inherit; font-size:12.5px;" />
+            <button id="addHolidayBtn" style="padding:0 14px; border:none; border-radius:9px; background:var(--navy); color:#fff; font-weight:600; font-size:12.5px; cursor:pointer;">Add</button>
+          </div>
+          <div id="holidayListAdmin"></div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -452,6 +459,7 @@
   try{
     firebase.initializeApp(FIREBASE_CONFIG);
     db = firebase.firestore();
+    firebase.auth().signInAnonymously().catch(function(err){ console.error('Anon auth failed', err); });
   }catch(e){
     console.error('Firebase init failed', e);
     showBanner('Could not connect to Firebase — showing sample data only.');
@@ -564,35 +572,75 @@
     });
   }
 
+  // ---- Real Leaflet map ----
+  var leafletMap = L.map('leafletMap', { zoomControl: true, attributionControl: true })
+    .setView([17.3850, 78.4867], 12); // Hyderabad
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(leafletMap);
+  var markers = {}; // empId -> L.marker
+
+  function makeIcon(name, busy){
+    return L.divIcon({
+      className: '',
+      html: '<div class="pin-marker '+(busy?'busy':'')+'"><div class="ping"></div><div class="head"><div class="init">'+initials(name)+'</div></div></div>',
+      iconSize: [32, 32],
+      iconAnchor: [16, 32]
+    });
+  }
+
   function renderLivePins(locs){
-    var host = document.getElementById('mapPins');
     var ids = Object.keys(locs);
     var pill = document.getElementById('mapStatusPill');
     if(ids.length === 0){
-      host.innerHTML = '';
       pill.textContent = 'No one checked in yet';
       pill.style.background = '#FDE8EC'; pill.style.color = '#D53A5E';
-      return;
+    } else {
+      pill.textContent = ids.length + ' live';
+      pill.style.background = '#E4F9F1'; pill.style.color = '#1A9C71';
     }
-    pill.textContent = ids.length + ' live';
-    pill.style.background = '#E4F9F1'; pill.style.color = '#1A9C71';
-    // Map real lat/lng into the illustrative grid using a simple normalized spread
-    // (this SVG is a stylized map, not real geo-projected tiles).
-    host.innerHTML = ids.map(function(id, i){
+
+    // Remove markers for anyone no longer present
+    Object.keys(markers).forEach(function(id){
+      if(ids.indexOf(id) === -1){ leafletMap.removeLayer(markers[id]); delete markers[id]; }
+    });
+
+    ids.forEach(function(id){
       var loc = locs[id];
-      var top = 25 + ((Math.abs(hashCode(id)) % 55));
-      var left = 15 + ((Math.abs(hashCode(id + 'x')) % 70));
+      if(typeof loc.lat !== 'number' || typeof loc.lng !== 'number') return;
       var busy = loc.status === 'on';
       var t = loc.ts ? new Date(loc.ts) : null;
       var timeStr = t ? (pad2(t.getHours())+':'+pad2(t.getMinutes())) : '';
-      return '<div class="pin '+(busy?'busy':'')+'" style="top:'+top+'%; left:'+left+'%;">'+
-        '<div class="label">'+(loc.name||'—')+' &middot; '+timeStr+'</div>'+
-        '<div class="ping"></div>'+
-        '<div class="head"><div class="init">'+initials(loc.name)+'</div></div>'+
-      '</div>';
-    }).join('');
+      var tooltipText = (loc.name||'—') + ' · ' + timeStr;
+      if(markers[id]){
+        markers[id].setLatLng([loc.lat, loc.lng]);
+        markers[id].setIcon(makeIcon(loc.name, busy));
+        markers[id].setTooltipContent(tooltipText);
+      } else {
+        markers[id] = L.marker([loc.lat, loc.lng], { icon: makeIcon(loc.name, busy) })
+          .addTo(leafletMap)
+          .bindTooltip(tooltipText, { className: 'pin-tooltip', direction: 'top', offset: [0, -30] });
+      }
+    });
+
+    // Auto-fit the map to show everyone currently live
+    var latlngs = ids.map(function(id){ return [locs[id].lat, locs[id].lng]; }).filter(function(p){ return typeof p[0]==='number'; });
+    if(latlngs.length > 0){
+      leafletMap.fitBounds(latlngs, { padding: [40,40], maxZoom: 14 });
+    }
   }
-  function hashCode(s){ var h=0; for(var i=0;i<s.length;i++){ h=((h<<5)-h)+s.charCodeAt(i); h|=0; } return h; }
+
+  document.getElementById('mapSearchInput').addEventListener('input', function(){
+    var q = this.value.trim().toLowerCase();
+    if(!q){ return; }
+    var match = Object.keys(markers).find(function(id){
+      var m = markers[id];
+      var tip = m.getTooltip();
+      return tip && tip.getContent().toLowerCase().indexOf(q) > -1;
+    });
+    if(match){ leafletMap.setView(markers[match].getLatLng(), 15); markers[match].openTooltip(); }
+  });
 
   function loadLiveLocations(){
     if(!db) return;
@@ -632,11 +680,111 @@
     }, function(err){ console.error(err); });
   }
 
+  // ---------- Leave requests ----------
+  function empNameById(id){
+    var e = employees.filter(function(x){ return String(x.id) === String(id); })[0];
+    return e ? e.name : ('Employee ' + id);
+  }
+  function loadLeaveRequests(){
+    if(!db) return;
+    db.collection(FS_COLLECTION).doc('field_leaves').onSnapshot(function(doc){
+      var all = {};
+      try{ all = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : {}; }catch(e){ all = {}; }
+      var rows = [];
+      Object.keys(all).forEach(function(empId){
+        (all[empId]||[]).forEach(function(l, idx){
+          if((l.status||'pending') === 'pending') rows.push({ empId: empId, idx: idx, leave: l });
+        });
+      });
+      document.getElementById('leaveCountPill').textContent = rows.length + ' pending';
+      var host = document.getElementById('leaveRequestsBody');
+      if(rows.length === 0){
+        host.innerHTML = '<div style="color:var(--slate); font-size:12.5px; padding:8px 2px;">No pending requests.</div>';
+        return;
+      }
+      host.innerHTML = rows.map(function(r, i){
+        var l = r.leave;
+        return '<div style="display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--line);">'+
+          '<div><div style="font-weight:600; font-size:13px;">'+empNameById(r.empId)+'</div>'+
+          '<div style="font-size:11.5px; color:var(--slate);">'+l.from+(l.to && l.to!==l.from ? ' → '+l.to : '')+' &middot; '+(l.reason||'')+'</div></div>'+
+          '<div style="display:flex; gap:6px;">'+
+          '<button class="leave-act" data-emp="'+r.empId+'" data-idx="'+r.idx+'" data-status="approved" style="border:none; background:#E4F9F1; color:var(--green-dk); font-size:11px; font-weight:600; padding:6px 10px; border-radius:8px; cursor:pointer;">Approve</button>'+
+          '<button class="leave-act" data-emp="'+r.empId+'" data-idx="'+r.idx+'" data-status="rejected" style="border:none; background:#FDE8EC; color:var(--pink-dk); font-size:11px; font-weight:600; padding:6px 10px; border-radius:8px; cursor:pointer;">Reject</button>'+
+          '</div></div>';
+      }).join('');
+      Array.prototype.forEach.call(host.querySelectorAll('.leave-act'), function(btn){
+        btn.addEventListener('click', function(){
+          var empId = btn.getAttribute('data-emp'), idx = parseInt(btn.getAttribute('data-idx'),10), status = btn.getAttribute('data-status');
+          var ref = db.collection(FS_COLLECTION).doc('field_leaves');
+          db.runTransaction(function(tx){
+            return tx.get(ref).then(function(doc){
+              var all2 = {};
+              try{ all2 = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : {}; }catch(e){ all2 = {}; }
+              if(all2[empId] && all2[empId][idx]) all2[empId][idx].status = status;
+              tx.set(ref, { value: JSON.stringify(all2) });
+            });
+          });
+        });
+      });
+    });
+  }
+
+  // ---------- Holidays ----------
+  function loadHolidaysAdmin(){
+    if(!db) return;
+    db.collection(FS_COLLECTION).doc('att_holidays').onSnapshot(function(doc){
+      var list = [];
+      try{ list = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : []; }catch(e){ list = []; }
+      list.sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
+      var host = document.getElementById('holidayListAdmin');
+      if(list.length === 0){ host.innerHTML = '<div style="color:var(--slate); font-size:12.5px;">No holidays added yet.</div>'; return; }
+      host.innerHTML = list.map(function(h, i){
+        return '<div style="display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--line); font-size:12.5px;">'+
+          '<div><strong>'+(h.name||'Holiday')+'</strong> &middot; <span class="mono" style="color:var(--slate);">'+(h.date||'')+'</span></div>'+
+          '<span data-i="'+i+'" class="del-holiday" style="color:var(--pink-dk); cursor:pointer; font-size:11px;">Remove</span></div>';
+      }).join('');
+      Array.prototype.forEach.call(host.querySelectorAll('.del-holiday'), function(el){
+        el.addEventListener('click', function(){
+          var i = parseInt(el.getAttribute('data-i'), 10);
+          var ref = db.collection(FS_COLLECTION).doc('att_holidays');
+          db.runTransaction(function(tx){
+            return tx.get(ref).then(function(doc){
+              var list2 = [];
+              try{ list2 = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : []; }catch(e){ list2 = []; }
+              list2.sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
+              list2.splice(i, 1);
+              tx.set(ref, { value: JSON.stringify(list2) });
+            });
+          });
+        });
+      });
+    });
+  }
+  document.getElementById('addHolidayBtn').addEventListener('click', function(){
+    var date = document.getElementById('holidayDate').value;
+    var name = document.getElementById('holidayName').value.trim();
+    if(!date || !name) return;
+    var ref = db.collection(FS_COLLECTION).doc('att_holidays');
+    db.runTransaction(function(tx){
+      return tx.get(ref).then(function(doc){
+        var list = [];
+        try{ list = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : []; }catch(e){ list = []; }
+        list.push({ date: date, name: name });
+        tx.set(ref, { value: JSON.stringify(list) });
+      });
+    }).then(function(){
+      document.getElementById('holidayDate').value = '';
+      document.getElementById('holidayName').value = '';
+    });
+  });
+
   if(db){
     loadEmployees();
     loadTodayAttendance();
     loadLiveLocations();
     loadTodayTasks();
+    loadLeaveRequests();
+    loadHolidaysAdmin();
   }
 })();
 </script>
