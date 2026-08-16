@@ -48,6 +48,11 @@
     padding:22px 0;
     gap:8px;
     flex-shrink:0;
+    position:fixed;
+    top:0; left:0;
+    height:100vh;
+    overflow-y:auto;
+    z-index:500;
   }
   .sidebar .logo{
     width:38px; height:38px;
@@ -74,7 +79,7 @@
   .nav-item svg{width:20px; height:20px;}
 
   /* Main */
-  .main{ flex:1; display:flex; flex-direction:column; min-width:0; }
+  .main{ flex:1; display:flex; flex-direction:column; min-width:0; margin-left:76px; width:calc(100% - 76px); }
   .topbar{
     height:72px;
     background:var(--card);
