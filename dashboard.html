@@ -278,22 +278,22 @@
 
 <div class="sidebar">
   <div class="logo">FO</div>
-  <div class="nav-item active" title="Dashboard">
+  <div class="nav-item active" title="Dashboard" data-view="overview">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
   </div>
-  <div class="nav-item" title="Employees">
+  <div class="nav-item" title="Employees" data-view="employees">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20c1.5-4 4.5-6 7.5-6s6 2 7.5 6"/></svg>
   </div>
-  <div class="nav-item" title="Live locations">
+  <div class="nav-item" title="Live locations" data-view="overview" data-scroll="mapPanel">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 21s7-6.5 7-11.5A7 7 0 0 0 5 9.5C5 14.5 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.3"/></svg>
   </div>
-  <div class="nav-item" title="Tasks">
+  <div class="nav-item" title="Tasks" data-view="overview" data-scroll="tasksPanel">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M8 12l2.5 2.5L16 9"/></svg>
   </div>
-  <div class="nav-item" title="Attendance">
+  <div class="nav-item" title="Leaves &amp; attendance" data-view="overview" data-scroll="leavesPanelSection">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
   </div>
-  <div class="nav-item" title="Reports">
+  <div class="nav-item" title="Reports" data-view="reports">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>
   </div>
   <div class="nav-item" title="Settings" style="margin-top:auto;">
@@ -318,6 +318,8 @@
   </div>
 
   <div class="content">
+
+    <div id="view-overview">
 
     <div class="stats-row">
       <div class="stat-card c1">
@@ -348,7 +350,7 @@
     </div>
     <div id="connBanner" style="display:none; margin:-8px 0 18px; padding:10px 16px; border-radius:10px; background:#FFF3E0; color:#8a5316; font-size:12.5px; font-weight:500;"></div>
 
-    <div class="grid-main">
+    <div class="grid-main" id="mapPanel">
 
       <div class="panel">
         <div class="panel-head">
@@ -370,7 +372,7 @@
         </div>
       </div>
 
-      <div class="panel">
+      <div class="panel" id="tasksPanel">
         <div class="panel-head">
           <h2>Tasks today</h2>
           <div class="date-pill" id="tasksStatusPill">Waiting for data&hellip;</div>
@@ -399,6 +401,7 @@
               <span class="val" id="tasksPendingVal">0</span>
             </div>
           </div>
+          <div id="tasksByEmpList" style="width:100%; margin-top:16px; border-top:1px solid var(--line); padding-top:14px;"></div>
         </div>
       </div>
 
@@ -415,7 +418,7 @@
       <div id="rosterBody"></div>
     </div>
 
-    <div class="grid-main" style="margin-top:18px;">
+    <div class="grid-main" style="margin-top:18px;" id="leavesPanelSection">
       <div class="panel">
         <div class="panel-head">
           <h2>Pending leave requests</h2>
@@ -445,6 +448,85 @@
         <div class="date-pill" id="visitsCountPill">0 logged</div>
       </div>
       <div id="visitsGrid" style="padding:16px 20px; display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:12px;"></div>
+    </div>
+
+    </div><!-- /view-overview -->
+
+    <!-- ================= EMPLOYEES VIEW ================= -->
+    <div id="view-employees" style="display:none;">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Add employee</h2>
+        </div>
+        <div style="padding:18px 20px; display:grid; grid-template-columns:repeat(4,1fr) auto; gap:10px; align-items:end;">
+          <div>
+            <div style="font-size:11px; color:var(--slate); margin-bottom:5px;">Name</div>
+            <input id="newEmpName" type="text" placeholder="Full name" style="width:100%; padding:9px 11px; border-radius:9px; border:1px solid var(--line); font-family:inherit; font-size:12.5px;" />
+          </div>
+          <div>
+            <div style="font-size:11px; color:var(--slate); margin-bottom:5px;">Staff ID</div>
+            <input id="newEmpStaffId" type="text" placeholder="e.g. 470691" style="width:100%; padding:9px 11px; border-radius:9px; border:1px solid var(--line); font-family:inherit; font-size:12.5px;" />
+          </div>
+          <div>
+            <div style="font-size:11px; color:var(--slate); margin-bottom:5px;">Department</div>
+            <input id="newEmpDept" type="text" placeholder="e.g. HK Operative" style="width:100%; padding:9px 11px; border-radius:9px; border:1px solid var(--line); font-family:inherit; font-size:12.5px;" />
+          </div>
+          <div>
+            <div style="font-size:11px; color:var(--slate); margin-bottom:5px;">Gender</div>
+            <select id="newEmpGender" style="width:100%; padding:9px 11px; border-radius:9px; border:1px solid var(--line); font-family:inherit; font-size:12.5px; background:#fff;">
+              <option value="">—</option>
+              <option value="M">Male</option>
+              <option value="F">Female</option>
+              <option value="O">Other</option>
+            </select>
+          </div>
+          <button id="addEmployeeBtn" style="padding:10px 18px; border:none; border-radius:9px; background:var(--navy); color:#fff; font-weight:600; font-size:12.5px; cursor:pointer; white-space:nowrap;">Add employee</button>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:18px;">
+        <div class="panel-head">
+          <h2>All employees</h2>
+          <div class="date-pill" id="empManageCount">—</div>
+        </div>
+        <div class="roster-row head">
+          <div></div><div>Employee</div><div>Department</div><div>Staff ID</div><div></div>
+        </div>
+        <div id="empManageBody"></div>
+      </div>
+    </div>
+
+    <!-- ================= REPORTS VIEW ================= -->
+    <div id="view-reports" style="display:none;">
+      <div class="stats-row">
+        <div class="stat-card c1">
+          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg></div>
+          <div class="num" id="repAttendanceRate">—</div>
+          <div class="label">Attendance rate today</div>
+        </div>
+        <div class="stat-card c3">
+          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M8 12l2.5 2.5L16 9"/></svg></div>
+          <div class="num" id="repTaskRate">—</div>
+          <div class="label">Task completion rate</div>
+        </div>
+        <div class="stat-card c5">
+          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div>
+          <div class="num" id="repVisitsToday">—</div>
+          <div class="label">Visits logged today</div>
+        </div>
+        <div class="stat-card c4">
+          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></div>
+          <div class="num" id="repPendingLeaves">—</div>
+          <div class="label">Pending leave requests</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Attendance by department (today)</h2>
+        </div>
+        <div id="repDeptBars" style="padding:20px;"></div>
+      </div>
     </div>
 
     <!-- Visit photo lightbox -->
@@ -531,6 +613,37 @@
 
   var employees = [];
   var attendanceToday = {};
+  var latestTasksTotal = 0, latestTasksDone = 0;
+  var latestVisitsCount = 0;
+  var latestPendingLeaves = 0;
+
+  // ---------- Sidebar view switching ----------
+  Array.prototype.forEach.call(document.querySelectorAll('.nav-item[data-view]'), function(item){
+    item.addEventListener('click', function(){
+      var view = item.getAttribute('data-view');
+      var scrollTarget = item.getAttribute('data-scroll');
+
+      Array.prototype.forEach.call(document.querySelectorAll('.nav-item[data-view]'), function(i){ i.classList.remove('active'); });
+      item.classList.add('active');
+
+      document.getElementById('view-overview').style.display = view === 'overview' ? 'block' : 'none';
+      document.getElementById('view-employees').style.display = view === 'employees' ? 'block' : 'none';
+      document.getElementById('view-reports').style.display = view === 'reports' ? 'block' : 'none';
+
+      if(view === 'overview'){
+        // Leaflet needs a resize nudge after being hidden/shown, else tiles render blank.
+        setTimeout(function(){ if(leafletMap) leafletMap.invalidateSize(); }, 50);
+        if(scrollTarget){
+          setTimeout(function(){
+            var el = document.getElementById(scrollTarget);
+            if(el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }, 80);
+        }
+      }
+      if(view === 'employees') renderEmployeeManageList();
+      if(view === 'reports') renderReports();
+    });
+  });
 
   function renderStats(){
     var today = new Date();
@@ -584,6 +697,8 @@
       }catch(e){ employees = []; }
       renderStats();
       renderRoster();
+      if(document.getElementById('view-employees').style.display !== 'none') renderEmployeeManageList();
+      if(document.getElementById('view-reports').style.display !== 'none') renderReports();
     }, function(err){
       console.error(err);
       showBanner('Could not read employee roster from Firestore — check console/network.');
@@ -604,6 +719,7 @@
       });
       renderStats();
       renderRoster();
+      if(document.getElementById('view-reports').style.display !== 'none') renderReports();
     });
   }
 
@@ -699,6 +815,7 @@
         (all[empId]||[]).forEach(function(t){ total++; if(t.done) done++; });
       });
       var pending = total - done;
+      latestTasksTotal = total; latestTasksDone = done;
       document.getElementById('tasksTotalNum').textContent = total;
       document.getElementById('tasksDoneVal').textContent = done;
       document.getElementById('tasksPendingVal').textContent = pending;
@@ -712,6 +829,20 @@
       document.getElementById('tasksStatusPill').textContent = total ? 'Live' : 'No tasks logged yet';
       document.getElementById('tasksStatusPill').style.background = total ? '#E4F9F1' : '#FDE8EC';
       document.getElementById('tasksStatusPill').style.color = total ? '#1A9C71' : '#D53A5E';
+
+      // Per-employee breakdown (used on the overview panel)
+      var byEmpHost = document.getElementById('tasksByEmpList');
+      var empIds = Object.keys(all).filter(function(id){ return (all[id]||[]).length > 0; });
+      if(empIds.length === 0){
+        byEmpHost.innerHTML = '<div style="color:var(--slate); font-size:12px;">No one has logged tasks yet today.</div>';
+      } else {
+        byEmpHost.innerHTML = empIds.map(function(id){
+          var list = all[id] || [];
+          var d2 = list.filter(function(t){ return t.done; }).length;
+          return '<div style="display:flex; justify-content:space-between; padding:6px 0; font-size:12px;"><span>'+empNameById(id)+'</span><span class="mono" style="color:var(--slate);">'+d2+'/'+list.length+'</span></div>';
+        }).join('');
+      }
+      if(document.getElementById('view-reports').style.display !== 'none') renderReports();
     }, function(err){ console.error(err); });
   }
 
@@ -732,6 +863,7 @@
         });
       });
       document.getElementById('leaveCountPill').textContent = rows.length + ' pending';
+      latestPendingLeaves = rows.length;
       var host = document.getElementById('leaveRequestsBody');
       if(rows.length === 0){
         host.innerHTML = '<div style="color:var(--slate); font-size:12.5px; padding:8px 2px;">No pending requests.</div>';
@@ -847,6 +979,8 @@
         renderVisitsGrid(visits);
         renderVisitPins(visits);
         document.getElementById('visitsCountPill').textContent = visits.length + ' logged';
+        latestVisitsCount = visits.length;
+        if(document.getElementById('view-reports').style.display !== 'none') renderReports();
       }, function(err){ console.error('loadFieldVisits failed', err); });
   }
   function renderVisitsGrid(visits){
@@ -901,6 +1035,110 @@
   document.getElementById('visitLightbox').addEventListener('click', function(e){
     if(e.target === this) this.style.display = 'none';
   });
+
+  // ---------- Employees: add / remove ----------
+  function writeEmployees(list){
+    return ensureAuthReady().then(function(){
+      return db.collection(FS_COLLECTION).doc('att_employees').set({ value: JSON.stringify(list) });
+    });
+  }
+  document.getElementById('addEmployeeBtn').addEventListener('click', function(){
+    var name = document.getElementById('newEmpName').value.trim();
+    var staffId = document.getElementById('newEmpStaffId').value.trim();
+    var dept = document.getElementById('newEmpDept').value.trim();
+    var gender = document.getElementById('newEmpGender').value;
+    if(!name){ showBanner('Enter a name before adding an employee.'); return; }
+    var btn = this;
+    btn.disabled = true;
+    ensureAuthReady().then(function(){
+      var ref = db.collection(FS_COLLECTION).doc('att_employees');
+      return db.runTransaction(function(tx){
+        return tx.get(ref).then(function(doc){
+          var list = [];
+          try{ list = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : []; }catch(e){ list = []; }
+          var newId = 'emp_' + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
+          list.push({ id: newId, name: name, staffId: staffId, dept: dept, gender: gender, photo: '' });
+          tx.set(ref, { value: JSON.stringify(list) });
+        });
+      });
+    }).then(function(){
+      document.getElementById('newEmpName').value = '';
+      document.getElementById('newEmpStaffId').value = '';
+      document.getElementById('newEmpDept').value = '';
+      document.getElementById('newEmpGender').value = '';
+    }).catch(function(err){ console.error(err); showBanner('Could not add employee — check Anonymous auth is enabled in Firebase.'); })
+      .finally(function(){ btn.disabled = false; });
+  });
+
+  function renderEmployeeManageList(){
+    var host = document.getElementById('empManageBody');
+    document.getElementById('empManageCount').textContent = employees.length + ' total';
+    if(employees.length === 0){ host.innerHTML = '<div style="padding:20px; color:var(--slate); font-size:12.5px;">No employees yet — add one above.</div>'; return; }
+    host.innerHTML = employees.map(function(e, i){
+      return '<div class="roster-row">'+
+        '<div class="r-avatar" style="background:'+GRADIENTS[i % GRADIENTS.length]+';">'+initials(e.name)+'</div>'+
+        '<div class="r-name">'+(e.name||'—')+'</div>'+
+        '<div>'+(e.dept||'—')+'</div>'+
+        '<div class="mono">'+(e.staffId||'—')+'</div>'+
+        '<div><span class="del-emp" data-id="'+e.id+'" style="color:var(--pink-dk); cursor:pointer; font-size:11.5px; font-weight:600;">Remove</span></div>'+
+      '</div>';
+    }).join('');
+    Array.prototype.forEach.call(host.querySelectorAll('.del-emp'), function(el){
+      el.addEventListener('click', function(){
+        var id = el.getAttribute('data-id');
+        var emp = employees.filter(function(e){ return String(e.id) === String(id); })[0];
+        if(!confirm('Remove ' + (emp ? emp.name : 'this employee') + '? Their past attendance history is kept, they just won\'t appear as active staff.')) return;
+        ensureAuthReady().then(function(){
+          var ref = db.collection(FS_COLLECTION).doc('att_employees');
+          return db.runTransaction(function(tx){
+            return tx.get(ref).then(function(doc){
+              var list = [];
+              try{ list = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : []; }catch(e){ list = []; }
+              list = list.filter(function(e){ return String(e.id) !== String(id); });
+              tx.set(ref, { value: JSON.stringify(list) });
+            });
+          });
+        }).catch(function(err){ console.error(err); showBanner('Could not remove employee — check Anonymous auth is enabled in Firebase.'); });
+      });
+    });
+  }
+
+  // ---------- Reports ----------
+  function renderReports(){
+    var totalEmp = employees.length || 0;
+    var present = 0;
+    employees.forEach(function(e){
+      var rec = attendanceToday[e.id];
+      var c = rec && typeof rec === 'object' ? rec.c : rec;
+      if(c === 'P' || c === 'N' || c === 'HD') present++;
+    });
+    var attRate = totalEmp ? Math.round((present/totalEmp)*100) : 0;
+    document.getElementById('repAttendanceRate').textContent = attRate + '%';
+    document.getElementById('repTaskRate').textContent = latestTasksTotal ? Math.round((latestTasksDone/latestTasksTotal)*100) + '%' : '—';
+    document.getElementById('repVisitsToday').textContent = latestVisitsCount;
+    document.getElementById('repPendingLeaves').textContent = latestPendingLeaves;
+
+    // Attendance by department
+    var deptTotals = {}, deptPresent = {};
+    employees.forEach(function(e){
+      var dept = e.dept || 'Unassigned';
+      deptTotals[dept] = (deptTotals[dept]||0) + 1;
+      var rec = attendanceToday[e.id];
+      var c = rec && typeof rec === 'object' ? rec.c : rec;
+      if(c === 'P' || c === 'N' || c === 'HD') deptPresent[dept] = (deptPresent[dept]||0) + 1;
+    });
+    var depts = Object.keys(deptTotals).sort();
+    var host = document.getElementById('repDeptBars');
+    if(depts.length === 0){ host.innerHTML = '<div style="color:var(--slate); font-size:12.5px;">No department data yet.</div>'; return; }
+    host.innerHTML = depts.map(function(dept){
+      var tot = deptTotals[dept], pres = deptPresent[dept] || 0;
+      var pct = tot ? Math.round((pres/tot)*100) : 0;
+      return '<div style="margin-bottom:14px;">'+
+        '<div style="display:flex; justify-content:space-between; font-size:12.5px; margin-bottom:5px;"><span style="font-weight:600;">'+dept+'</span><span class="mono" style="color:var(--slate);">'+pres+'/'+tot+' &middot; '+pct+'%</span></div>'+
+        '<div style="height:8px; background:var(--bg); border-radius:5px; overflow:hidden;"><div style="height:100%; width:'+pct+'%; background:linear-gradient(90deg,var(--blue),var(--violet)); border-radius:5px;"></div></div>'+
+      '</div>';
+    }).join('');
+  }
 
   if(db){
     loadEmployees();
