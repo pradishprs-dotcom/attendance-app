@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no" />
-<title>Field Ops — Check In</title>
+<title>Anantha Compass — Check In</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
@@ -14,7 +14,7 @@
 <link rel="apple-touch-icon" href="icon-192.png" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<meta name="apple-mobile-web-app-title" content="Field Ops" />
+<meta name="apple-mobile-web-app-title" content="Anantha Compass" />
 <style>
   :root{
     --navy:#141B3C;
@@ -52,14 +52,13 @@
     flex:1; display:flex; flex-direction:column;
     padding:32px 22px;
   }
-  #loginScreen .brand{
-    width:44px; height:44px; border-radius:12px;
-    background:linear-gradient(135deg, var(--blue), var(--violet));
-    display:flex; align-items:center; justify-content:center;
-    color:#fff; font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:16px;
+  .brand{
+    width:52px; height:52px; border-radius:14px;
+    display:block; overflow:hidden;
     margin-bottom:22px;
     box-shadow:0 6px 16px rgba(59,111,246,.3);
   }
+  .brand img{ width:100%; height:100%; display:block; }
   #loginScreen h1{ font-family:'Space Grotesk', sans-serif; font-size:22px; margin-bottom:6px; }
   #loginScreen p{ color:var(--slate); font-size:13.5px; margin-bottom:22px; }
   #empSearch{
@@ -246,8 +245,8 @@
 
   <!-- ACCESS CODE GATE -->
   <div id="accessGate" style="display:flex; flex-direction:column; padding:60px 26px; min-height:100vh; justify-content:center;">
-    <div class="brand" style="margin:0 auto 20px;">FO</div>
-    <h1 style="text-align:center;">Field Ops access code</h1>
+    <div class="brand" style="margin:0 auto 20px;"><img id="brandImgGate" alt="Anantha Compass" /></div>
+    <h1 style="text-align:center;">Anantha Compass access code</h1>
     <p style="text-align:center;">Ask your office for the staff access code to continue.</p>
     <input id="accessCodeInput" type="tel" inputmode="numeric" placeholder="Access code" style="width:100%; padding:13px 16px; border-radius:12px; border:1px solid var(--line); background:var(--card); font-size:16px; text-align:center; letter-spacing:3px; margin:18px 0 12px;" />
     <button id="accessCodeSubmit" style="width:100%; padding:13px; border:none; border-radius:14px; background:linear-gradient(135deg,var(--blue),var(--violet)); color:#fff; font-size:14.5px; font-weight:600; font-family:inherit; cursor:pointer;">Continue</button>
@@ -256,7 +255,7 @@
 
   <!-- LOGIN / IDENTIFY -->
   <div id="loginScreen" style="display:none;">
-    <div class="brand">FO</div>
+    <div class="brand"><img id="brandImgLogin" alt="Anantha Compass" /></div>
     <h1>Who's checking in?</h1>
     <p>Pick your name to open your field check-in.</p>
     <input id="empSearch" type="text" placeholder="Search your name..." />
@@ -456,9 +455,40 @@
         <div class="row1"><div class="title">Staff ID</div></div>
         <div class="meta" id="profileStaffId">—</div>
       </div>
+      <div style="margin-top:12px;">
+        <div class="list-card" id="openAboutFromProfile" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
+          <div class="title">About this app</div>
+          <span style="color:var(--slate); font-size:16px;">›</span>
+        </div>
+      </div>
       <div style="margin-top:20px;">
         <button id="profileSwitchBtn" class="primary-btn" style="background:linear-gradient(135deg,var(--pink),var(--pink-dk));">Not you? Switch account</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ABOUT PANEL -->
+  <div class="overlay-panel" id="aboutPanel">
+    <div class="overlay-head">
+      <h2>About</h2>
+      <div class="close-btn" data-close="aboutPanel">&times;</div>
+    </div>
+    <div class="overlay-body">
+      <div style="text-align:center; padding:10px 0 22px;">
+        <img id="brandImgAbout" alt="Anantha Compass" style="width:56px; height:56px; border-radius:14px; margin:0 auto 14px; display:block;" />
+        <div style="font-family:'Space Grotesk',sans-serif; font-size:17px; font-weight:600;">Anantha Compass</div>
+        <div style="font-size:11px; font-weight:700; letter-spacing:.08em; color:var(--blue); text-transform:uppercase; margin-top:2px;">Field Operations</div>
+        <div style="font-size:11px; color:var(--slate); margin-top:8px;">Version 1.0 &middot; Updated Aug 2026</div>
+      </div>
+      <div class="list-card">
+        <div class="title">Anantha MK Institute of Medical Sciences</div>
+        <div class="meta">Chikoti Gardens, Begumpet, Hyderabad, Telangana 500016</div>
+      </div>
+      <div class="list-card">
+        <div class="title">Contact</div>
+        <div class="meta">+91 988 988 5052 &middot; info@anantharehab.com</div>
+      </div>
+      <div class="empty-note">Need help with this app? Contact your system administrator.</div>
     </div>
   </div>
 
@@ -511,6 +541,12 @@
       setTimeout(resolve, 4000); // don't block forever if auth is misconfigured
     });
   }
+
+  var COMPASS_ICON = "data:image/png;base64,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";
+  ['brandImgGate','brandImgLogin','brandImgAbout'].forEach(function(id){
+    var el = document.getElementById(id);
+    if(el) el.src = COMPASS_ICON;
+  });
 
   var GRADIENTS = ['linear-gradient(135deg,#3B6FF6,#8B5CF6)','linear-gradient(135deg,#F5A623,#F0567A)','linear-gradient(135deg,#2FBE8F,#3B6FF6)','linear-gradient(135deg,#F0567A,#8B5CF6)','linear-gradient(135deg,#8B5CF6,#3B6FF6)'];
 
@@ -876,6 +912,10 @@
   document.getElementById('profileSwitchBtn').addEventListener('click', function(){
     closePanel('profilePanel');
     document.getElementById('switchUserBtn').click();
+  });
+  document.getElementById('openAboutFromProfile').addEventListener('click', function(){
+    closePanel('profilePanel');
+    openPanel('aboutPanel');
   });
 
   // ---------- Leaves ----------

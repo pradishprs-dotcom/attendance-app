@@ -1,7 +1,7 @@
 {
-  "name": "Field Ops Check-In",
-  "short_name": "Field Ops",
-  "description": "Check in, track tasks, and log field visits",
+  "name": "Anantha Compass",
+  "short_name": "Compass",
+  "description": "Field Operations — check in, track tasks, and log field visits",
   "start_url": "./checkin.html",
   "display": "standalone",
   "background_color": "#F3F5FB",
