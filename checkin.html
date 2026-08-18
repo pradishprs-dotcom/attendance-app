@@ -601,13 +601,11 @@
       '</div>';
     }).join('');
     Array.prototype.forEach.call(host.querySelectorAll('.emp-row'), function(row){
-      row.addEventListener('click', function(){ selectEmployee(row.getAttribute('data-id')); });
+      row.addEventListener('click', function(){ selectEmployeeFromPicker(row.getAttribute('data-id')); });
     });
   }
 
-  function selectEmployee(id){
-    var e = employees.filter(function(x){ return String(x.id) === String(id); })[0];
-    if(!e) return;
+  function finalizeSelectEmployee(e){
     currentEmp = e;
     localStorage.setItem('field_emp_id', String(e.id));
     document.getElementById('loginScreen').style.display = 'none';
@@ -617,13 +615,67 @@
     loadTasks();
   }
 
+  // Called when the app restores a saved login on the SAME device (page
+  // reload etc.) — no warning needed, this device is already this person's.
+  function selectEmployee(id){
+    var e = employees.filter(function(x){ return String(x.id) === String(id); })[0];
+    if(!e) return;
+    finalizeSelectEmployee(e);
+  }
+
+  // Called when someone taps a name in the picker list — this could be the
+  // right person on a new device, OR someone else tapping the wrong name by
+  // mistake. If Firestore shows that person already on duty, confirm first
+  // so a mis-tap can't silently open (and potentially check out) someone
+  // else's active shift.
+  function selectEmployeeFromPicker(id){
+    var e = employees.filter(function(x){ return String(x.id) === String(id); })[0];
+    if(!e || !db) { if(e) finalizeSelectEmployee(e); return; }
+    var day = new Date().getDate();
+    monthDocRef().get().then(function(doc){
+      var monthData = {};
+      try{ monthData = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : {}; }catch(err){ monthData = {}; }
+      var rec = (monthData[e.id] || {})[day] || {};
+      var alreadyOnDuty = rec.inT && !rec.outT;
+      if(alreadyOnDuty){
+        var since = timeLabel(new Date(rec.inT));
+        var ok = confirm(e.name + ' is already checked in (since ' + since + '). Only continue if you are ' + e.name + ' — tap Cancel if you tapped the wrong name.');
+        if(!ok) return;
+      }
+      finalizeSelectEmployee(e);
+    }).catch(function(err){
+      console.error(err);
+      finalizeSelectEmployee(e); // don't block login entirely if this check fails
+    });
+  }
+
   document.getElementById('empSearch').addEventListener('input', function(){ renderEmpList(this.value); });
   document.getElementById('switchUserBtn').addEventListener('click', function(){
+    if(checkInTime && !checkOutTime){
+      var ok = confirm((currentEmp ? currentEmp.name : 'This person') + ' is still checked in. Check out and switch accounts?');
+      if(!ok) return;
+      toast('Checking out…');
+      performCheckOut().then(function(){
+        toast('Checked out. Switching account…');
+        doSwitchAccount();
+      }).catch(function(err){
+        console.error(err);
+        toast('Could not check out — please allow location access and try again.');
+      });
+      return;
+    }
+    doSwitchAccount();
+  });
+  function doSwitchAccount(){
     localStorage.removeItem('field_emp_id');
     stopWatching();
+    if(unsubTasks){ unsubTasks(); unsubTasks = null; }
+    currentEmp = null;
+    checkInTime = null;
+    checkOutTime = null;
     document.getElementById('mainScreen').style.display = 'none';
     document.getElementById('loginScreen').style.display = 'flex';
-  });
+  }
 
   // ---------- Today's attendance state ----------
   function todayDateLabel(){
@@ -754,6 +806,17 @@
     lastPos = null;
   }
 
+  function performCheckOut(){
+    return getPosition().then(function(coords){
+      checkOutTime = new Date();
+      stopWatching();
+      return writeAttendance({ outT: checkOutTime.toISOString(), lastAction:'out', km: Math.round(distanceKm*100)/100 }).then(function(){
+        writeLocation(coords, 'off');
+        renderCheckState();
+      });
+    });
+  }
+
   document.getElementById('swipeBtn').addEventListener('click', function(){
     if(!currentEmp) return;
     var btn = this;
@@ -773,14 +836,8 @@
       }).finally(function(){ btn.disabled = false; });
     } else if(!checkOutTime){
       btn.disabled = true;
-      getPosition().then(function(coords){
-        checkOutTime = new Date();
-        stopWatching();
-        return writeAttendance({ outT: checkOutTime.toISOString(), lastAction:'out', km: Math.round(distanceKm*100)/100 }).then(function(){
-          writeLocation(coords, 'off');
-          renderCheckState();
-          toast('Checked out — see you tomorrow!');
-        });
+      performCheckOut().then(function(){
+        toast('Checked out — see you tomorrow!');
       }).catch(function(err){
         console.error(err);
         toast('Could not get your location. Please allow location access and try again.');
