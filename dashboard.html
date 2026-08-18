@@ -623,6 +623,41 @@
           <div id="exportStatus" style="font-size:11.5px; color:var(--slate); margin-top:10px;"></div>
         </div>
       </div>
+
+      <div class="panel" style="margin-top:18px; border-color:#F5C2CE;">
+        <div class="panel-head" style="background:#FFF7F8;">
+          <h2 style="color:#B02040;">Data cleanup</h2>
+          <div class="date-pill" style="background:#FDE8EC; color:#D53A5E;">Permanent — cannot be undone</div>
+        </div>
+        <div style="padding:18px 20px;">
+          <p style="font-size:12px; color:var(--slate); margin-bottom:14px; line-height:1.6;">
+            Use this to free up Firestore storage once old records aren't needed anymore — mainly visit
+            photos, since those take up the most space. <b>Export what you need first</b> (above) — deleted
+            data cannot be recovered.
+          </p>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;">
+            <div>
+              <div style="font-size:11px; color:var(--slate); margin-bottom:5px;">From date</div>
+              <input id="cleanupFrom" type="date" style="width:100%; padding:9px 11px; border-radius:9px; border:1px solid var(--line); font-family:inherit; font-size:12.5px;" />
+            </div>
+            <div>
+              <div style="font-size:11px; color:var(--slate); margin-bottom:5px;">To date</div>
+              <input id="cleanupTo" type="date" style="width:100%; padding:9px 11px; border-radius:9px; border:1px solid var(--line); font-family:inherit; font-size:12.5px;" />
+            </div>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:16px; font-size:12.5px;">
+            <label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="cleanupVisits" checked /> Field visits (photos + GPS logs) — biggest storage saver</label>
+            <label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="cleanupTasks" /> Daily task lists</label>
+            <label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="cleanupAttendance" /> Attendance / check-in records</label>
+            <label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="cleanupLeaves" /> Leave requests</label>
+          </div>
+          <div style="display:flex; gap:10px;">
+            <button id="cleanupPreviewBtn" style="padding:10px 18px; border:none; border-radius:9px; background:var(--navy); color:#fff; font-weight:600; font-size:12.5px; cursor:pointer;">Preview what will be deleted</button>
+            <button id="cleanupDeleteBtn" disabled style="padding:10px 18px; border:none; border-radius:9px; background:#D53A5E; color:#fff; font-weight:600; font-size:12.5px; cursor:pointer; opacity:.5;">Delete permanently</button>
+          </div>
+          <div id="cleanupStatus" style="font-size:12px; color:var(--slate); margin-top:12px; line-height:1.6;"></div>
+        </div>
+      </div>
     </div>
 
     <!-- Visit photo lightbox -->
@@ -1570,6 +1605,203 @@
         visits.sort(function(a,b){ return a.ts - b.ts; });
         return visits;
       });
+  }
+
+  // ---------- Data cleanup ----------
+  var cleanupPreview = null; // { from, to, types, counts } — must match before Delete is allowed
+
+  function cleanupSelectedTypes(){
+    return {
+      visits: document.getElementById('cleanupVisits').checked,
+      tasks: document.getElementById('cleanupTasks').checked,
+      attendance: document.getElementById('cleanupAttendance').checked,
+      leaves: document.getElementById('cleanupLeaves').checked
+    };
+  }
+
+  function rangeQuery(prefixBase, from, to){
+    // Works for any doc-ID scheme shaped "prefix_<YYYY-MM-DD>..." since the
+    // date sorts correctly as a plain string.
+    return db.collection(FS_COLLECTION)
+      .where(firebase.firestore.FieldPath.documentId(), '>=', prefixBase + from)
+      .where(firebase.firestore.FieldPath.documentId(), '<', prefixBase + to + '\uf8ff')
+      .get();
+  }
+
+  function countAttendanceInRange(from, to){
+    var monthKeysList = monthKeysInRange(from, to);
+    return Promise.all(monthKeysList.map(function(mk){
+      return db.collection(FS_COLLECTION).doc('att_data_' + mk).get().then(function(doc){
+        var data = {};
+        try{ data = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : {}; }catch(e){ data = {}; }
+        var count = 0;
+        Object.keys(data).forEach(function(empId){
+          Object.keys(data[empId]).forEach(function(day){
+            var dateStr = mk + '-' + pad2(parseInt(day,10));
+            if(dateStr >= from && dateStr <= to) count++;
+          });
+        });
+        return count;
+      });
+    })).then(function(counts){ return counts.reduce(function(a,b){ return a+b; }, 0); });
+  }
+
+  function countLeavesInRange(from, to){
+    return db.collection(FS_COLLECTION).doc('field_leaves').get().then(function(doc){
+      var all = {};
+      try{ all = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : {}; }catch(e){ all = {}; }
+      var count = 0;
+      Object.keys(all).forEach(function(empId){
+        (all[empId]||[]).forEach(function(l){
+          if(l.from >= from && l.from <= to) count++;
+        });
+      });
+      return count;
+    });
+  }
+
+  document.getElementById('cleanupPreviewBtn').addEventListener('click', function(){
+    var from = document.getElementById('cleanupFrom').value;
+    var to = document.getElementById('cleanupTo').value;
+    var statusEl = document.getElementById('cleanupStatus');
+    var deleteBtn = document.getElementById('cleanupDeleteBtn');
+    deleteBtn.disabled = true; deleteBtn.style.opacity = '.5';
+    cleanupPreview = null;
+    if(!from || !to){ statusEl.textContent = 'Pick both a from and to date.'; return; }
+    if(to < from){ statusEl.textContent = '"To" date is before "From" date.'; return; }
+    var types = cleanupSelectedTypes();
+    if(!types.visits && !types.tasks && !types.attendance && !types.leaves){
+      statusEl.textContent = 'Select at least one data type to clean up.'; return;
+    }
+    statusEl.textContent = 'Checking what would be deleted…';
+
+    var jobs = [];
+    var counts = {};
+    if(types.visits) jobs.push(rangeQuery('visit_', from, to).then(function(snap){ counts.visits = snap.size; }));
+    if(types.tasks) jobs.push(rangeQuery('field_tasks_', from, to).then(function(snap){ counts.tasks = snap.size; }));
+    if(types.attendance) jobs.push(countAttendanceInRange(from, to).then(function(n){ counts.attendance = n; }));
+    if(types.leaves) jobs.push(countLeavesInRange(from, to).then(function(n){ counts.leaves = n; }));
+
+    Promise.all(jobs).then(function(){
+      var lines = [];
+      if(types.visits) lines.push(counts.visits + ' visit record' + (counts.visits===1?'':'s') + ' (with photos)');
+      if(types.tasks) lines.push(counts.tasks + ' daily task list' + (counts.tasks===1?'':'s'));
+      if(types.attendance) lines.push(counts.attendance + ' attendance day-record' + (counts.attendance===1?'':'s'));
+      if(types.leaves) lines.push(counts.leaves + ' leave request' + (counts.leaves===1?'':'s'));
+      var total = (counts.visits||0)+(counts.tasks||0)+(counts.attendance||0)+(counts.leaves||0);
+      if(total === 0){
+        statusEl.textContent = 'Nothing found in that range — nothing to delete.';
+        return;
+      }
+      statusEl.innerHTML = '<b>Will delete:</b><br>' + lines.join('<br>');
+      cleanupPreview = { from: from, to: to, types: types, counts: counts };
+      deleteBtn.disabled = false; deleteBtn.style.opacity = '1';
+    }).catch(function(err){
+      console.error(err);
+      statusEl.textContent = 'Could not check — try again.';
+    });
+  });
+
+  // Any change invalidates the preview — forces a fresh check before deleting.
+  ['cleanupFrom','cleanupTo','cleanupVisits','cleanupTasks','cleanupAttendance','cleanupLeaves'].forEach(function(id){
+    document.getElementById(id).addEventListener('change', function(){
+      cleanupPreview = null;
+      var deleteBtn = document.getElementById('cleanupDeleteBtn');
+      deleteBtn.disabled = true; deleteBtn.style.opacity = '.5';
+    });
+  });
+
+  document.getElementById('cleanupDeleteBtn').addEventListener('click', function(){
+    var from = document.getElementById('cleanupFrom').value;
+    var to = document.getElementById('cleanupTo').value;
+    var statusEl = document.getElementById('cleanupStatus');
+    var types = cleanupSelectedTypes();
+    if(!cleanupPreview || cleanupPreview.from !== from || cleanupPreview.to !== to ||
+       JSON.stringify(cleanupPreview.types) !== JSON.stringify(types)){
+      statusEl.textContent = 'Settings changed — click Preview again before deleting.';
+      return;
+    }
+    var c = cleanupPreview.counts;
+    var total = (c.visits||0)+(c.tasks||0)+(c.attendance||0)+(c.leaves||0);
+    var confirmMsg = 'Permanently delete ' + total + ' record(s) from ' + from + ' to ' + to + '? This cannot be undone.';
+    if(!confirm(confirmMsg)) return;
+
+    var btn = this;
+    btn.disabled = true;
+    statusEl.textContent = 'Deleting…';
+
+    ensureAuthReady().then(function(){
+      var steps = [];
+      if(types.visits) steps.push(function(){ return batchDeleteByRange('visit_', from, to); });
+      if(types.tasks) steps.push(function(){ return batchDeleteByRange('field_tasks_', from, to); });
+      if(types.attendance) steps.push(function(){ return deleteAttendanceInRange(from, to); });
+      if(types.leaves) steps.push(function(){ return deleteLeavesInRange(from, to); });
+      return steps.reduce(function(p, fn){ return p.then(fn); }, Promise.resolve());
+    }).then(function(){
+      statusEl.textContent = 'Deleted ' + total + ' record(s) from ' + from + ' to ' + to + '.';
+      cleanupPreview = null;
+      document.getElementById('cleanupDeleteBtn').disabled = true;
+      document.getElementById('cleanupDeleteBtn').style.opacity = '.5';
+    }).catch(function(err){
+      console.error(err);
+      statusEl.textContent = 'Something went wrong partway through — check Firestore console to confirm what was removed before retrying.';
+    }).finally(function(){ btn.disabled = false; });
+  });
+
+  function batchDeleteByRange(prefixBase, from, to){
+    return rangeQuery(prefixBase, from, to).then(function(snap){
+      var docs = []; snap.forEach(function(d){ docs.push(d.ref); });
+      return commitInChunks(docs);
+    });
+  }
+  function commitInChunks(refs){
+    var chunks = [];
+    for(var i=0; i<refs.length; i+=400) chunks.push(refs.slice(i, i+400));
+    return chunks.reduce(function(p, chunk){
+      return p.then(function(){
+        var batch = db.batch();
+        chunk.forEach(function(ref){ batch.delete(ref); });
+        return batch.commit();
+      });
+    }, Promise.resolve());
+  }
+  function deleteAttendanceInRange(from, to){
+    var monthKeysList = monthKeysInRange(from, to);
+    return monthKeysList.reduce(function(p, mk){
+      return p.then(function(){
+        var ref = db.collection(FS_COLLECTION).doc('att_data_' + mk);
+        return db.runTransaction(function(tx){
+          return tx.get(ref).then(function(doc){
+            var data = {};
+            try{ data = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : {}; }catch(e){ data = {}; }
+            Object.keys(data).forEach(function(empId){
+              Object.keys(data[empId]).forEach(function(day){
+                var dateStr = mk + '-' + pad2(parseInt(day,10));
+                if(dateStr >= from && dateStr <= to) delete data[empId][day];
+              });
+              if(Object.keys(data[empId]).length === 0) delete data[empId];
+            });
+            if(Object.keys(data).length === 0){ tx.delete(ref); }
+            else{ tx.set(ref, { value: JSON.stringify(data) }); }
+          });
+        });
+      });
+    }, Promise.resolve());
+  }
+  function deleteLeavesInRange(from, to){
+    var ref = db.collection(FS_COLLECTION).doc('field_leaves');
+    return db.runTransaction(function(tx){
+      return tx.get(ref).then(function(doc){
+        var all = {};
+        try{ all = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : {}; }catch(e){ all = {}; }
+        Object.keys(all).forEach(function(empId){
+          all[empId] = (all[empId]||[]).filter(function(l){ return !(l.from >= from && l.from <= to); });
+          if(all[empId].length === 0) delete all[empId];
+        });
+        if(Object.keys(all).length === 0){ tx.delete(ref); }
+        else{ tx.set(ref, { value: JSON.stringify(all) }); }
+      });
+    });
   }
 
   document.getElementById('exportVisitsCsvBtn').addEventListener('click', function(){
