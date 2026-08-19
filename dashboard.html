@@ -554,6 +554,70 @@
         </div>
         <div id="empManageBody"></div>
       </div>
+
+      <div class="panel" style="margin-top:18px;">
+        <div class="panel-head">
+          <h2>Registered devices</h2>
+          <div class="date-pill" id="deviceCountPill">—</div>
+        </div>
+        <p style="padding:14px 20px 0; font-size:12px; color:var(--slate); line-height:1.6;">
+          Each phone locks to the first employee who checks in on it, to prevent one phone being used to
+          check in for multiple people. Reset a device here if it's genuinely changed hands (lost phone,
+          replacement, employee left).
+        </p>
+        <div id="deviceListBody" style="padding:10px 20px 18px;"></div>
+      </div>
+
+      <div class="panel" style="margin-top:18px;">
+        <div class="panel-head">
+          <h2>Manual attendance correction</h2>
+        </div>
+        <p style="padding:14px 20px 0; font-size:12px; color:var(--slate); line-height:1.6;">
+          For phone/technical issues — add, fix, or clear a single day's attendance for an employee.
+        </p>
+        <div style="padding:14px 20px; display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+          <div>
+            <div style="font-size:11px; color:var(--slate); margin-bottom:5px;">Employee</div>
+            <select id="manualAttEmpSelect" style="width:100%; padding:9px 11px; border-radius:9px; border:1px solid var(--line); font-family:inherit; font-size:12.5px; background:#fff;">
+              <option value="">Select employee…</option>
+            </select>
+          </div>
+          <div>
+            <div style="font-size:11px; color:var(--slate); margin-bottom:5px;">Date</div>
+            <input id="manualAttDate" type="date" style="width:100%; padding:9px 11px; border-radius:9px; border:1px solid var(--line); font-family:inherit; font-size:12.5px;" />
+          </div>
+        </div>
+        <div style="padding:0 20px 8px;">
+          <button id="manualAttLoadBtn" style="padding:9px 16px; border:1px solid var(--line); border-radius:9px; background:#fff; color:var(--navy); font-weight:600; font-size:12px; cursor:pointer;">Load existing entry</button>
+        </div>
+        <div style="padding:10px 20px; display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;">
+          <div>
+            <div style="font-size:11px; color:var(--slate); margin-bottom:5px;">Status</div>
+            <select id="manualAttStatus" style="width:100%; padding:9px 11px; border-radius:9px; border:1px solid var(--line); font-family:inherit; font-size:12.5px; background:#fff;">
+              <option value="P">Present</option>
+              <option value="A">Absent</option>
+              <option value="HD">Half day</option>
+            </select>
+          </div>
+          <div>
+            <div style="font-size:11px; color:var(--slate); margin-bottom:5px;">Check-in time</div>
+            <input id="manualAttIn" type="time" style="width:100%; padding:9px 11px; border-radius:9px; border:1px solid var(--line); font-family:inherit; font-size:12.5px;" />
+          </div>
+          <div>
+            <div style="font-size:11px; color:var(--slate); margin-bottom:5px;">Check-out time</div>
+            <input id="manualAttOut" type="time" style="width:100%; padding:9px 11px; border-radius:9px; border:1px solid var(--line); font-family:inherit; font-size:12.5px;" />
+          </div>
+        </div>
+        <div style="padding:0 20px 14px;">
+          <div style="font-size:11px; color:var(--slate); margin-bottom:5px;">Remarks (optional)</div>
+          <input id="manualAttRemarks" type="text" placeholder="e.g. Phone broken, marked manually by admin" style="width:100%; padding:9px 11px; border-radius:9px; border:1px solid var(--line); font-family:inherit; font-size:12.5px;" />
+        </div>
+        <div style="padding:0 20px 18px; display:flex; gap:10px;">
+          <button id="manualAttSaveBtn" style="padding:10px 18px; border:none; border-radius:9px; background:linear-gradient(135deg,var(--blue),var(--violet)); color:#fff; font-weight:600; font-size:12.5px; cursor:pointer;">Save entry</button>
+          <button id="manualAttClearBtn" style="padding:10px 18px; border:none; border-radius:9px; background:#FDE8EC; color:#D53A5E; font-weight:600; font-size:12.5px; cursor:pointer;">Clear entry</button>
+        </div>
+        <div id="manualAttStatus_msg" style="padding:0 20px 18px; font-size:11.5px; color:var(--slate);"></div>
+      </div>
     </div>
 
     <!-- ================= REPORTS VIEW ================= -->
@@ -839,7 +903,7 @@
         }, 80);
       }
     }
-    if(view === 'employees') renderEmployeeManageList();
+    if(view === 'employees'){ renderEmployeeManageList(); renderDeviceList(); }
     if(view === 'reports') renderReports();
   }
 
@@ -1388,6 +1452,51 @@
     });
   }
 
+  // ---------- Registered devices ----------
+  function renderDeviceList(){
+    if(!db) return;
+    db.collection(FS_COLLECTION).doc('device_bindings').get().then(function(doc){
+      var bindings = {};
+      try{ bindings = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : {}; }catch(e){ bindings = {}; }
+      var deviceIds = Object.keys(bindings);
+      document.getElementById('deviceCountPill').textContent = deviceIds.length + ' device' + (deviceIds.length===1?'':'s');
+      var host = document.getElementById('deviceListBody');
+      if(deviceIds.length === 0){
+        host.innerHTML = '<div style="color:var(--slate); font-size:12.5px;">No devices registered yet — this fills in as employees check in from their phones.</div>';
+        return;
+      }
+      deviceIds.sort(function(a,b){ return (bindings[b].boundAt||0) - (bindings[a].boundAt||0); });
+      host.innerHTML = deviceIds.map(function(id){
+        var b = bindings[id];
+        var d = b.boundAt ? new Date(b.boundAt) : null;
+        var dateStr = d ? (d.getDate() + '/' + (d.getMonth()+1) + '/' + d.getFullYear()) : '—';
+        return '<div style="display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--line); font-size:12.5px;">'+
+          '<div><strong>'+(b.empName||'—')+'</strong> <span class="mono" style="color:var(--slate);">&middot; registered '+dateStr+'</span></div>'+
+          '<span class="reset-device" data-id="'+id+'" style="color:var(--pink-dk); cursor:pointer; font-size:11px; font-weight:600;">Reset device</span>'+
+        '</div>';
+      }).join('');
+      Array.prototype.forEach.call(host.querySelectorAll('.reset-device'), function(el){
+        el.addEventListener('click', function(){
+          var deviceId = el.getAttribute('data-id');
+          var empName = bindings[deviceId] ? bindings[deviceId].empName : 'this employee';
+          if(!confirm('Unregister this device from ' + empName + '? Whoever uses this phone next will lock it to their own name.')) return;
+          ensureAuthReady().then(function(){
+            var ref = db.collection(FS_COLLECTION).doc('device_bindings');
+            return db.runTransaction(function(tx){
+              return tx.get(ref).then(function(doc2){
+                var all = {};
+                try{ all = doc2.exists && doc2.data().value ? JSON.parse(doc2.data().value) : {}; }catch(e){ all = {}; }
+                delete all[deviceId];
+                tx.set(ref, { value: JSON.stringify(all) });
+              });
+            });
+          }).then(function(){ renderDeviceList(); })
+            .catch(function(err){ console.error(err); showBanner('Could not reset device — check Anonymous auth is enabled in Firebase.'); });
+        });
+      });
+    });
+  }
+
   // ---------- Reports ----------
   function renderReports(){
     var totalEmp = employees.length || 0;
@@ -1440,6 +1549,13 @@
       return '<option value="'+e.id+'">'+(e.name||'—')+'</option>';
     }).join('');
     if(aCurrent && employees.some(function(e){ return String(e.id)===aCurrent; })) aSel.value = aCurrent;
+
+    var mSel = document.getElementById('manualAttEmpSelect');
+    var mCurrent = mSel.value;
+    mSel.innerHTML = '<option value="">Select employee…</option>' + employees.map(function(e){
+      return '<option value="'+e.id+'">'+(e.name||'—')+'</option>';
+    }).join('');
+    if(mCurrent && employees.some(function(e){ return String(e.id)===mCurrent; })) mSel.value = mCurrent;
   }
 
   // ---------- Assign task ----------
@@ -1481,6 +1597,137 @@
     }).catch(function(err){
       console.error(err);
       statusEl.textContent = 'Could not assign — check Anonymous/Email auth is enabled in Firebase.';
+    }).finally(function(){ btn.disabled = false; });
+  });
+
+  // ---------- Manual attendance correction ----------
+  function manualAttMonthDoc(dateStr){
+    var mk = dateStr.slice(0,7); // "YYYY-MM"
+    return db.collection(FS_COLLECTION).doc('att_data_' + mk);
+  }
+  function manualAttDayNum(dateStr){
+    return parseInt(dateStr.slice(8,10), 10);
+  }
+
+  document.getElementById('manualAttLoadBtn').addEventListener('click', function(){
+    var empId = document.getElementById('manualAttEmpSelect').value;
+    var dateStr = document.getElementById('manualAttDate').value;
+    var msgEl = document.getElementById('manualAttStatus_msg');
+    if(!empId){ msgEl.textContent = 'Pick an employee first.'; return; }
+    if(!dateStr){ msgEl.textContent = 'Pick a date first.'; return; }
+    if(!db){ msgEl.textContent = 'Not connected to Firestore.'; return; }
+
+    msgEl.textContent = 'Loading…';
+    manualAttMonthDoc(dateStr).get().then(function(doc){
+      var data = {};
+      try{ data = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : {}; }catch(e){ data = {}; }
+      var day = manualAttDayNum(dateStr);
+      var rec = (data[empId] || {})[day];
+      if(!rec){
+        document.getElementById('manualAttStatus').value = 'P';
+        document.getElementById('manualAttIn').value = '';
+        document.getElementById('manualAttOut').value = '';
+        document.getElementById('manualAttRemarks').value = '';
+        msgEl.textContent = 'No existing entry for this date — fill in the fields and Save to create one.';
+        return;
+      }
+      document.getElementById('manualAttStatus').value = rec.c || 'P';
+      document.getElementById('manualAttIn').value = rec.inT ? isoToTimeInput(rec.inT) : '';
+      document.getElementById('manualAttOut').value = rec.outT ? isoToTimeInput(rec.outT) : '';
+      document.getElementById('manualAttRemarks').value = rec.r || '';
+      msgEl.textContent = 'Loaded existing entry for ' + dateStr + '.';
+    }).catch(function(err){ console.error(err); msgEl.textContent = 'Could not load — try again.'; });
+  });
+
+  function isoToTimeInput(iso){
+    var d = new Date(iso);
+    return pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+  }
+  function timeInputToIso(dateStr, timeStr){
+    if(!timeStr) return null;
+    return new Date(dateStr + 'T' + timeStr + ':00').toISOString();
+  }
+
+  document.getElementById('manualAttSaveBtn').addEventListener('click', function(){
+    var empId = document.getElementById('manualAttEmpSelect').value;
+    var dateStr = document.getElementById('manualAttDate').value;
+    var status = document.getElementById('manualAttStatus').value;
+    var inTime = document.getElementById('manualAttIn').value;
+    var outTime = document.getElementById('manualAttOut').value;
+    var remarks = document.getElementById('manualAttRemarks').value.trim();
+    var msgEl = document.getElementById('manualAttStatus_msg');
+    if(!empId){ msgEl.textContent = 'Pick an employee.'; return; }
+    if(!dateStr){ msgEl.textContent = 'Pick a date.'; return; }
+    if(inTime && outTime && outTime < inTime){ msgEl.textContent = 'Check-out time is before check-in time.'; return; }
+    if(!db){ msgEl.textContent = 'Not connected to Firestore.'; return; }
+
+    var btn = this;
+    btn.disabled = true;
+    msgEl.textContent = 'Saving…';
+    ensureAuthReady().then(function(){
+      var ref = manualAttMonthDoc(dateStr);
+      var day = manualAttDayNum(dateStr);
+      return db.runTransaction(function(tx){
+        return tx.get(ref).then(function(doc){
+          var data = {};
+          try{ data = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : {}; }catch(e){ data = {}; }
+          if(!data[empId]) data[empId] = {};
+          var existing = data[empId][day] || {};
+          data[empId][day] = Object.assign({}, existing, {
+            c: status,
+            inT: timeInputToIso(dateStr, inTime),
+            outT: timeInputToIso(dateStr, outTime),
+            r: remarks || 'Marked manually by admin',
+            lastAction: 'admin-edit'
+          });
+          tx.set(ref, { value: JSON.stringify(data) });
+        });
+      });
+    }).then(function(){
+      var empName = (employees.filter(function(e){return String(e.id)===String(empId);})[0]||{}).name || 'employee';
+      msgEl.textContent = 'Saved entry for ' + empName + ' on ' + dateStr + '.';
+    }).catch(function(err){
+      console.error(err);
+      msgEl.textContent = 'Could not save — check Anonymous/Email auth is enabled in Firebase.';
+    }).finally(function(){ btn.disabled = false; });
+  });
+
+  document.getElementById('manualAttClearBtn').addEventListener('click', function(){
+    var empId = document.getElementById('manualAttEmpSelect').value;
+    var dateStr = document.getElementById('manualAttDate').value;
+    var msgEl = document.getElementById('manualAttStatus_msg');
+    if(!empId){ msgEl.textContent = 'Pick an employee.'; return; }
+    if(!dateStr){ msgEl.textContent = 'Pick a date.'; return; }
+    if(!db){ msgEl.textContent = 'Not connected to Firestore.'; return; }
+    var empName = (employees.filter(function(e){return String(e.id)===String(empId);})[0]||{}).name || 'this employee';
+    if(!confirm('Clear the attendance entry for ' + empName + ' on ' + dateStr + '? This cannot be undone.')) return;
+
+    var btn = this;
+    btn.disabled = true;
+    msgEl.textContent = 'Clearing…';
+    ensureAuthReady().then(function(){
+      var ref = manualAttMonthDoc(dateStr);
+      var day = manualAttDayNum(dateStr);
+      return db.runTransaction(function(tx){
+        return tx.get(ref).then(function(doc){
+          var data = {};
+          try{ data = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : {}; }catch(e){ data = {}; }
+          if(data[empId]){
+            delete data[empId][day];
+            if(Object.keys(data[empId]).length === 0) delete data[empId];
+          }
+          tx.set(ref, { value: JSON.stringify(data) });
+        });
+      });
+    }).then(function(){
+      document.getElementById('manualAttStatus').value = 'P';
+      document.getElementById('manualAttIn').value = '';
+      document.getElementById('manualAttOut').value = '';
+      document.getElementById('manualAttRemarks').value = '';
+      msgEl.textContent = 'Cleared. This date now shows as "Not marked".';
+    }).catch(function(err){
+      console.error(err);
+      msgEl.textContent = 'Could not clear — check Anonymous/Email auth is enabled in Firebase.';
     }).finally(function(){ btn.disabled = false; });
   });
 
