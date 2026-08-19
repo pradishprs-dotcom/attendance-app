@@ -219,14 +219,30 @@
     box-shadow:none;
   }
   .leaflet-tooltip.pin-tooltip::before{ display:none; }
-  .map-search{
+  .map-search-icon-btn{
     position:absolute; top:16px; left:16px; z-index:1000;
-    background:var(--card); border:1px solid var(--line); border-radius:10px;
-    padding:10px 15px; font-size:12.5px; color:var(--slate);
-    display:flex; align-items:center; gap:8px; width:230px;
+    width:38px; height:38px; border-radius:10px;
+    background:var(--card); border:1px solid var(--line);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer; color:var(--slate);
     box-shadow:0 4px 14px rgba(20,27,60,.1);
   }
-  .map-search svg{width:14px; height:14px;}
+  .map-search-icon-btn svg{ width:16px; height:16px; }
+  .map-search-panel{
+    position:absolute; top:16px; left:16px; z-index:1001;
+    background:var(--card); border:1px solid var(--line); border-radius:10px;
+    width:250px; max-height:280px; overflow:hidden;
+    box-shadow:0 8px 22px rgba(20,27,60,.16);
+    display:none; flex-direction:column;
+  }
+  .map-search-panel .row{ display:flex; align-items:center; gap:8px; padding:10px 12px; border-bottom:1px solid var(--line); }
+  .map-search-panel input{ border:none; outline:none; background:transparent; font-family:inherit; font-size:12.5px; width:100%; color:var(--navy); }
+  .map-search-panel svg{ width:14px; height:14px; color:var(--slate); flex-shrink:0; }
+  .map-search-panel .close-x{ cursor:pointer; color:var(--slate); font-size:15px; line-height:1; }
+  #mapSearchSuggestions{ overflow-y:auto; max-height:220px; }
+  .map-suggest-item{ padding:9px 14px; font-size:12.5px; cursor:pointer; display:flex; align-items:center; gap:8px; }
+  .map-suggest-item:hover{ background:var(--bg); }
+  .map-suggest-empty{ padding:14px; font-size:11.5px; color:var(--slate); text-align:center; }
   .map-legend{
     position:absolute; bottom:16px; left:16px; z-index:1000;
     background:var(--card); border:1px solid var(--line); border-radius:10px;
@@ -338,8 +354,11 @@
       <div class="sub" id="todayLabel">Field Operations · Hyderabad region</div>
     </div>
     <div class="search-box" style="position:relative;">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <div id="topSearchIcon" style="display:flex; cursor:pointer;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      </div>
       <input id="topSearchInput" type="text" placeholder="Search employees, tasks..." style="border:none; outline:none; background:transparent; font-family:inherit; font-size:13px; width:100%; color:var(--navy);" />
+      <div id="topSearchSuggestions" style="display:none; position:absolute; top:44px; left:0; right:0; background:#fff; border:1px solid var(--line); border-radius:10px; box-shadow:0 8px 22px rgba(20,27,60,.16); max-height:280px; overflow-y:auto; z-index:1000;"></div>
     </div>
     <div class="topbar-right" style="position:relative;">
       <div class="bell" id="bellIcon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 8a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6"/><path d="M10 20a2 2 0 0 0 4 0"/></svg></div>
@@ -396,9 +415,16 @@
         <div class="map-wrap">
           <div id="leafletMap"></div>
 
-          <div class="map-search">
+          <div id="mapSearchToggle" class="map-search-icon-btn" title="Search present employees">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-            <input id="mapSearchInput" type="text" placeholder="Search employee" style="border:none; outline:none; background:transparent; font-family:inherit; font-size:12.5px; width:100%; color:var(--navy);" />
+          </div>
+          <div id="mapSearchPanel" class="map-search-panel">
+            <div class="row">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+              <input id="mapSearchInput" type="text" placeholder="Search present employees…" />
+              <div class="close-x" id="mapSearchClose">&times;</div>
+            </div>
+            <div id="mapSearchSuggestions"></div>
           </div>
 
           <div class="map-legend">
@@ -913,20 +939,60 @@
     });
   });
 
-  // ---------- Top search bar: filters roster + per-employee task list ----------
-  document.getElementById('topSearchInput').addEventListener('input', function(){
-    rosterFilter = this.value.trim();
+  // ---------- Top search bar: filters roster + shows an all-staff suggestion dropdown ----------
+  function applyTopSearch(name){
+    document.getElementById('topSearchInput').value = name || '';
+    rosterFilter = name || '';
     if(document.getElementById('view-overview').style.display === 'none'){
       switchView('overview', null);
     }
     renderRoster();
+    hideTopSearchSuggestions();
     if(rosterFilter){
       setTimeout(function(){
-        var el = document.getElementById('mapPanel');
         var roster = document.querySelector('.roster');
         if(roster) roster.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 60);
     }
+  }
+  function renderTopSearchSuggestions(query){
+    var host = document.getElementById('topSearchSuggestions');
+    var q = (query||'').trim().toLowerCase();
+    var list = employees.filter(function(e){ return !q || (e.name||'').toLowerCase().indexOf(q) > -1; });
+    if(employees.length === 0){
+      host.innerHTML = '<div style="padding:14px; font-size:11.5px; color:var(--slate); text-align:center;">No staff loaded yet.</div>';
+    } else if(list.length === 0){
+      host.innerHTML = '<div style="padding:14px; font-size:11.5px; color:var(--slate); text-align:center;">No match.</div>';
+    } else {
+      host.innerHTML = list.slice(0, 100).map(function(e){
+        return '<div class="top-suggest-item" data-name="'+e.name.replace(/"/g,'&quot;')+'" style="padding:10px 14px; font-size:12.5px; cursor:pointer; border-bottom:1px solid var(--line);">'+e.name+' <span style="color:var(--slate); font-size:11px;">&middot; '+(e.dept||'')+'</span></div>';
+      }).join('');
+      Array.prototype.forEach.call(host.querySelectorAll('.top-suggest-item'), function(el){
+        el.addEventListener('mouseenter', function(){ el.style.background = 'var(--bg)'; });
+        el.addEventListener('mouseleave', function(){ el.style.background = ''; });
+        el.addEventListener('click', function(){ applyTopSearch(el.getAttribute('data-name')); });
+      });
+    }
+    host.style.display = 'block';
+  }
+  function hideTopSearchSuggestions(){
+    document.getElementById('topSearchSuggestions').style.display = 'none';
+  }
+  document.getElementById('topSearchIcon').addEventListener('click', function(){
+    renderTopSearchSuggestions(document.getElementById('topSearchInput').value);
+    document.getElementById('topSearchInput').focus();
+  });
+  document.getElementById('topSearchInput').addEventListener('focus', function(){
+    renderTopSearchSuggestions(this.value);
+  });
+  document.getElementById('topSearchInput').addEventListener('input', function(){
+    rosterFilter = this.value.trim();
+    if(document.getElementById('view-overview').style.display !== 'none') renderRoster();
+    renderTopSearchSuggestions(this.value);
+  });
+  document.addEventListener('click', function(e){
+    var wrap = document.querySelector('.search-box');
+    if(wrap && !wrap.contains(e.target)) hideTopSearchSuggestions();
   });
 
   // ---------- Notification bell ----------
@@ -1078,6 +1144,7 @@
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(leafletMap);
   var markers = {}; // empId -> L.marker
+  var presentEmployees = []; // [{id, name}] — currently live on the map, refreshed each render
 
   function makeIcon(name, busy){
     return L.divIcon({
@@ -1104,6 +1171,9 @@
       if(ids.indexOf(id) === -1){ leafletMap.removeLayer(markers[id]); delete markers[id]; }
     });
 
+    presentEmployees = ids.map(function(id){ return { id: id, name: locs[id].name || '—' }; });
+    renderMapSuggestions(document.getElementById('mapSearchInput').value);
+
     ids.forEach(function(id){
       var loc = locs[id];
       if(typeof loc.lat !== 'number' || typeof loc.lng !== 'number') return;
@@ -1129,15 +1199,46 @@
     }
   }
 
-  document.getElementById('mapSearchInput').addEventListener('input', function(){
-    var q = this.value.trim().toLowerCase();
-    if(!q){ return; }
-    var match = Object.keys(markers).find(function(id){
-      var m = markers[id];
-      var tip = m.getTooltip();
-      return tip && tip.getContent().toLowerCase().indexOf(q) > -1;
+  // ---------- Map search: icon-toggle + present-team suggestions ----------
+  function openMapSearch(){
+    document.getElementById('mapSearchToggle').style.display = 'none';
+    document.getElementById('mapSearchPanel').style.display = 'flex';
+    document.getElementById('mapSearchInput').value = '';
+    renderMapSuggestions('');
+    document.getElementById('mapSearchInput').focus();
+  }
+  function closeMapSearch(){
+    document.getElementById('mapSearchPanel').style.display = 'none';
+    document.getElementById('mapSearchToggle').style.display = 'flex';
+  }
+  document.getElementById('mapSearchToggle').addEventListener('click', openMapSearch);
+  document.getElementById('mapSearchClose').addEventListener('click', closeMapSearch);
+
+  function renderMapSuggestions(query){
+    var host = document.getElementById('mapSearchSuggestions');
+    var q = (query||'').trim().toLowerCase();
+    var list = presentEmployees.filter(function(p){ return !q || p.name.toLowerCase().indexOf(q) > -1; });
+    if(presentEmployees.length === 0){
+      host.innerHTML = '<div class="map-suggest-empty">No one is checked in right now.</div>';
+      return;
+    }
+    if(list.length === 0){
+      host.innerHTML = '<div class="map-suggest-empty">No match among present staff.</div>';
+      return;
+    }
+    host.innerHTML = list.map(function(p){
+      return '<div class="map-suggest-item" data-id="'+p.id+'"><span class="dot" style="background:var(--green);"></span>'+p.name+'</div>';
+    }).join('');
+    Array.prototype.forEach.call(host.querySelectorAll('.map-suggest-item'), function(el){
+      el.addEventListener('click', function(){
+        var id = el.getAttribute('data-id');
+        if(markers[id]){ leafletMap.setView(markers[id].getLatLng(), 15); markers[id].openTooltip(); }
+        closeMapSearch();
+      });
     });
-    if(match){ leafletMap.setView(markers[match].getLatLng(), 15); markers[match].openTooltip(); }
+  }
+  document.getElementById('mapSearchInput').addEventListener('input', function(){
+    renderMapSuggestions(this.value);
   });
 
   function loadLiveLocations(){

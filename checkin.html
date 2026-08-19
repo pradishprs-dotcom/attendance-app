@@ -701,14 +701,21 @@
         var ok = confirm(e.name + ' is already checked in (since ' + since + '). Only continue if you are ' + e.name + ' — tap Cancel if you tapped the wrong name.');
         if(!ok) return;
       }
-      if(needsBinding) bindDeviceToEmployee(deviceId, e);
+      // Binding happens on actual check-in, not just opening this screen —
+      // so a mis-tap that's corrected via "switch" without checking in never
+      // locks the phone to the wrong person.
+      pendingDeviceId = deviceId;
+      pendingBindNeeded = needsBinding;
       finalizeSelectEmployee(e);
     }).catch(function(err){
       console.error(err);
-      if(needsBinding) bindDeviceToEmployee(deviceId, e);
+      pendingDeviceId = deviceId;
+      pendingBindNeeded = needsBinding;
       finalizeSelectEmployee(e); // don't block login entirely if this check fails
     });
   }
+  var pendingDeviceId = null;
+  var pendingBindNeeded = false;
 
   document.getElementById('empSearch').addEventListener('input', function(){ renderEmpList(this.value); });
   document.getElementById('switchUserBtn').addEventListener('click', function(){
@@ -734,6 +741,8 @@
     currentEmp = null;
     checkInTime = null;
     checkOutTime = null;
+    pendingDeviceId = null;
+    pendingBindNeeded = false;
     document.getElementById('mainScreen').style.display = 'none';
     document.getElementById('loginScreen').style.display = 'flex';
   }
@@ -833,16 +842,24 @@
 
   function writeLocation(coords, status){
     if(!db || !currentEmp) return;
+    var empId = currentEmp.id;
     ensureAuthReady().then(function(){
-      return db.collection(FS_COLLECTION).doc('field_locations').get().then(function(doc){
-        var locs = {};
-        try{ locs = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : {}; }catch(e){ locs = {}; }
-        if(status === 'off'){
-          delete locs[currentEmp.id];
-        } else {
-          locs[currentEmp.id] = { name: currentEmp.name, lat: coords.latitude, lng: coords.longitude, accuracy: coords.accuracy, status: status, ts: Date.now() };
-        }
-        return db.collection(FS_COLLECTION).doc('field_locations').set({ value: JSON.stringify(locs) });
+      var ref = db.collection(FS_COLLECTION).doc('field_locations');
+      return db.runTransaction(function(tx){
+        return tx.get(ref).then(function(doc){
+          var locs = {};
+          try{ locs = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : {}; }catch(e){ locs = {}; }
+          if(status === 'off'){
+            delete locs[empId];
+          } else {
+            // Re-check right at write time, not just when the GPS tick started —
+            // a late-arriving 'on' write must never resurrect someone who has
+            // since checked out (this was the "pin stays after checkout" bug).
+            if(checkOutTime) return;
+            locs[empId] = { name: currentEmp.name, lat: coords.latitude, lng: coords.longitude, accuracy: coords.accuracy, status: status, ts: Date.now() };
+          }
+          tx.set(ref, { value: JSON.stringify(locs) });
+        });
       });
     }).catch(function(err){ console.error('writeLocation failed', err); });
   }
@@ -889,6 +906,10 @@
           writeLocation(coords, 'on');
           startWatching();
           renderCheckState();
+          if(pendingBindNeeded && pendingDeviceId){
+            bindDeviceToEmployee(pendingDeviceId, currentEmp);
+            pendingBindNeeded = false;
+          }
           toast('Checked in — have a good shift!');
         });
       }).catch(function(err){
