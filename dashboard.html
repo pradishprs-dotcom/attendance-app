@@ -753,6 +753,34 @@
     <!-- Visit photo lightbox -->
   </div>
 
+  <!-- Employee history modal (outside all view-* containers so it works from any tab) -->
+  <div id="empHistoryModal" style="display:none; position:fixed; inset:0; background:rgba(20,27,60,.85); z-index:9999; align-items:center; justify-content:center; padding:20px;">
+    <div style="background:#fff; border-radius:16px; max-width:560px; width:100%; max-height:85vh; display:flex; flex-direction:column; overflow:hidden;">
+      <div style="padding:20px 24px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; flex-shrink:0;">
+        <div>
+          <div id="empHistoryName" style="font-family:'Space Grotesk',sans-serif; font-size:16px; font-weight:600; color:var(--navy);">—</div>
+          <div id="empHistoryDept" style="font-size:11.5px; color:var(--slate);">—</div>
+        </div>
+        <div id="empHistoryClose" style="width:30px; height:30px; border-radius:50%; background:var(--bg); display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:18px; color:var(--slate);">&times;</div>
+      </div>
+      <div style="padding:14px 24px; border-bottom:1px solid var(--line); display:flex; gap:10px; align-items:end; flex-shrink:0;">
+        <div>
+          <div style="font-size:10.5px; color:var(--slate); margin-bottom:4px;">From</div>
+          <input id="empHistoryFrom" type="date" style="padding:8px 10px; border-radius:8px; border:1px solid var(--line); font-family:inherit; font-size:12px;" />
+        </div>
+        <div>
+          <div style="font-size:10.5px; color:var(--slate); margin-bottom:4px;">To</div>
+          <input id="empHistoryTo" type="date" style="padding:8px 10px; border-radius:8px; border:1px solid var(--line); font-family:inherit; font-size:12px;" />
+        </div>
+        <button id="empHistoryLoadBtn" style="padding:8px 14px; border:none; border-radius:8px; background:var(--navy); color:#fff; font-weight:600; font-size:12px; cursor:pointer;">Load</button>
+        <div id="empHistorySummary" style="margin-left:auto; text-align:right; font-size:11.5px; color:var(--slate);"></div>
+      </div>
+      <div style="overflow-y:auto; flex:1;">
+        <div id="empHistoryBody"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- About panel (outside all view-* containers so it works from any tab) -->
   <div id="aboutPanel" style="display:none; position:fixed; inset:0; background:rgba(20,27,60,.85); z-index:9999; align-items:center; justify-content:center; padding:20px;">
     <div style="background:#fff; border-radius:16px; max-width:360px; width:100%; overflow:hidden;">
@@ -1089,7 +1117,7 @@
                 : c === 'A' ? '<span class="badge absent">Absent</span>'
                 : c === 'HD' ? '<span class="badge present">Half day</span>'
                 : '<span class="badge present" style="background:#EEF1FA;color:#6B7280;">Not marked</span>';
-      return '<div class="roster-row">'+
+      return '<div class="roster-row emp-history-row" data-id="'+e.id+'" style="cursor:pointer;">'+
         '<div class="r-avatar" style="background:'+GRADIENTS[i % GRADIENTS.length]+';">'+initials(e.name)+'</div>'+
         '<div><div class="r-name">'+(e.name||'—')+'</div><div class="r-role">'+(e.gender==='F'?'Staff':'Staff')+'</div></div>'+
         '<div>'+badge+'</div>'+
@@ -1097,6 +1125,9 @@
         '<div class="r-dist mono">'+(e.staffId||'—')+'</div>'+
       '</div>';
     }).join('');
+    Array.prototype.forEach.call(host.querySelectorAll('.emp-history-row'), function(row){
+      row.addEventListener('click', function(){ openEmpHistory(row.getAttribute('data-id')); });
+    });
   }
 
   function loadEmployees(){
@@ -1831,6 +1862,89 @@
       msgEl.textContent = 'Could not clear — check Anonymous/Email auth is enabled in Firebase.';
     }).finally(function(){ btn.disabled = false; });
   });
+
+  // ---------- Employee history modal ----------
+  var empHistoryCurrentId = null;
+  function openEmpHistory(empId){
+    var e = employees.filter(function(x){ return String(x.id) === String(empId); })[0];
+    if(!e) return;
+    empHistoryCurrentId = empId;
+    document.getElementById('empHistoryName').textContent = e.name || '—';
+    document.getElementById('empHistoryDept').textContent = (e.dept || '') + (e.staffId ? ' · ' + e.staffId : '');
+    var to = new Date();
+    var from = new Date(); from.setDate(from.getDate() - 13); // last 14 days by default
+    document.getElementById('empHistoryTo').value = to.getFullYear()+'-'+pad2(to.getMonth()+1)+'-'+pad2(to.getDate());
+    document.getElementById('empHistoryFrom').value = from.getFullYear()+'-'+pad2(from.getMonth()+1)+'-'+pad2(from.getDate());
+    document.getElementById('empHistoryModal').style.display = 'flex';
+    loadEmpHistory();
+  }
+  document.getElementById('empHistoryClose').addEventListener('click', function(){
+    document.getElementById('empHistoryModal').style.display = 'none';
+  });
+  document.getElementById('empHistoryModal').addEventListener('click', function(e){
+    if(e.target === this) this.style.display = 'none';
+  });
+  document.getElementById('empHistoryLoadBtn').addEventListener('click', loadEmpHistory);
+
+  function loadEmpHistory(){
+    if(!empHistoryCurrentId || !db) return;
+    var from = document.getElementById('empHistoryFrom').value;
+    var to = document.getElementById('empHistoryTo').value;
+    var bodyEl = document.getElementById('empHistoryBody');
+    var summaryEl = document.getElementById('empHistorySummary');
+    if(!from || !to){ bodyEl.innerHTML = '<div style="padding:20px; color:var(--slate); font-size:12.5px;">Pick both dates.</div>'; return; }
+    bodyEl.innerHTML = '<div style="padding:20px; color:var(--slate); font-size:12.5px;">Loading…</div>';
+    var empId = empHistoryCurrentId;
+    var monthKeysList = monthKeysInRange(from, to);
+    Promise.all(monthKeysList.map(function(mk){
+      return db.collection(FS_COLLECTION).doc('att_data_' + mk).get().then(function(doc){
+        var data = {};
+        try{ data = doc.exists && doc.data().value ? JSON.parse(doc.data().value) : {}; }catch(e){ data = {}; }
+        return { mk: mk, days: data[empId] || {} };
+      });
+    })).then(function(results){
+      var rows = [];
+      results.forEach(function(r){
+        Object.keys(r.days).forEach(function(day){
+          var dateStr = r.mk + '-' + pad2(parseInt(day,10));
+          if(dateStr < from || dateStr > to) return;
+          rows.push({ date: dateStr, rec: r.days[day] });
+        });
+      });
+      rows.sort(function(a,b){ return b.date.localeCompare(a.date); });
+
+      var totalKm = 0, presentDays = 0;
+      rows.forEach(function(r){
+        totalKm += r.rec.km || 0;
+        var c = r.rec.c;
+        if(c === 'P' || c === 'N' || c === 'HD') presentDays++;
+      });
+      summaryEl.innerHTML = presentDays + ' day' + (presentDays===1?'':'s') + ' present &middot; ' + totalKm.toFixed(1) + ' km total';
+
+      if(rows.length === 0){
+        bodyEl.innerHTML = '<div style="padding:20px; color:var(--slate); font-size:12.5px;">No attendance records in this range.</div>';
+        return;
+      }
+      bodyEl.innerHTML = '<div class="roster-row head" style="grid-template-columns:1fr 90px 90px 90px 70px;"><div>Date</div><div>Status</div><div>Check-in</div><div>Check-out</div><div>Distance</div></div>' +
+        rows.map(function(r){
+          var rec = r.rec;
+          var statusLbl = rec.c === 'P' ? 'Present' : rec.c === 'A' ? 'Absent' : rec.c === 'HD' ? 'Half day' : (rec.c || '—');
+          var inT = rec.inT ? timeLabel(new Date(rec.inT)) : '—';
+          var outT = rec.outT ? timeLabel(new Date(rec.outT)) : '—';
+          var km = rec.km ? rec.km.toFixed(1) + ' km' : '—';
+          return '<div class="roster-row" style="grid-template-columns:1fr 90px 90px 90px 70px;">'+
+            '<div>'+r.date+'</div>'+
+            '<div>'+statusLbl+'</div>'+
+            '<div class="mono" style="font-size:11.5px;">'+inT+'</div>'+
+            '<div class="mono" style="font-size:11.5px;">'+outT+'</div>'+
+            '<div class="mono" style="font-size:11.5px;">'+km+'</div>'+
+          '</div>';
+        }).join('');
+    }).catch(function(err){
+      console.error(err);
+      bodyEl.innerHTML = '<div style="padding:20px; color:var(--pink-dk); font-size:12.5px;">Could not load history — try again.</div>';
+    });
+  }
 
   function monthKeysInRange(fromStr, toStr){
     var from = new Date(fromStr + 'T00:00:00');
