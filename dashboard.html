@@ -11,6 +11,9 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <style>
   :root{
     --navy:#141B3C;
@@ -1191,6 +1194,35 @@
   var markers = {}; // empId -> L.marker
   var presentEmployees = []; // [{id, name}] — currently live on the map, refreshed each render
 
+  // Nearby pins stack and hide each other at normal zoom — cluster groups
+  // bundle close-together markers into a single numbered circle that expands
+  // on tap/zoom, so no one gets hidden behind someone else's pin.
+  var liveMarkerCluster = L.markerClusterGroup({
+    maxClusterRadius: 45,
+    spiderfyOnMaxZoom: true,
+    showCoverageOnHover: false,
+    iconCreateFunction: function(cluster){
+      return L.divIcon({
+        className: '',
+        html: '<div style="width:36px; height:36px; border-radius:50%; background:linear-gradient(135deg,var(--blue),var(--violet)); display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; font-family:\'Space Grotesk\',sans-serif; font-size:13px; box-shadow:0 3px 10px rgba(59,111,246,.45); border:2.5px solid #fff;">'+cluster.getChildCount()+'</div>',
+        iconSize: [36, 36]
+      });
+    }
+  }).addTo(leafletMap);
+
+  var visitMarkerCluster = L.markerClusterGroup({
+    maxClusterRadius: 45,
+    spiderfyOnMaxZoom: true,
+    showCoverageOnHover: false,
+    iconCreateFunction: function(cluster){
+      return L.divIcon({
+        className: '',
+        html: '<div style="width:34px; height:34px; border-radius:50%; background:linear-gradient(135deg,var(--amber),var(--amber-dk)); display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; font-family:\'Space Grotesk\',sans-serif; font-size:12.5px; box-shadow:0 3px 10px rgba(245,166,35,.45); border:2.5px solid #fff;">'+cluster.getChildCount()+'</div>',
+        iconSize: [34, 34]
+      });
+    }
+  }).addTo(leafletMap);
+
   function makeIcon(name, busy){
     return L.divIcon({
       className: '',
@@ -1213,7 +1245,7 @@
 
     // Remove markers for anyone no longer present
     Object.keys(markers).forEach(function(id){
-      if(ids.indexOf(id) === -1){ leafletMap.removeLayer(markers[id]); delete markers[id]; }
+      if(ids.indexOf(id) === -1){ liveMarkerCluster.removeLayer(markers[id]); delete markers[id]; }
     });
 
     presentEmployees = ids.map(function(id){ return { id: id, name: locs[id].name || '—' }; });
@@ -1232,8 +1264,8 @@
         markers[id].setTooltipContent(tooltipText);
       } else {
         markers[id] = L.marker([loc.lat, loc.lng], { icon: makeIcon(loc.name, busy) })
-          .addTo(leafletMap)
           .bindTooltip(tooltipText, { className: 'pin-tooltip', direction: 'top', offset: [0, -30] });
+        liveMarkerCluster.addLayer(markers[id]);
       }
     });
 
@@ -1277,7 +1309,14 @@
     Array.prototype.forEach.call(host.querySelectorAll('.map-suggest-item'), function(el){
       el.addEventListener('click', function(){
         var id = el.getAttribute('data-id');
-        if(markers[id]){ leafletMap.setView(markers[id].getLatLng(), 15); markers[id].openTooltip(); }
+        if(markers[id]){
+          // The marker may currently be bundled inside a cluster circle —
+          // zoomToShowLayer zooms in until it's actually visible on its own,
+          // then we can safely open its tooltip.
+          liveMarkerCluster.zoomToShowLayer(markers[id], function(){
+            markers[id].openTooltip();
+          });
+        }
         closeMapSearch();
       });
     });
@@ -1514,13 +1553,13 @@
         visitMarkers[v._id].setLatLng([v.lat, v.lng]);
       } else {
         visitMarkers[v._id] = L.marker([v.lat, v.lng], { icon: makeVisitIcon() })
-          .addTo(leafletMap)
           .bindTooltip(tooltipText, { className: 'pin-tooltip', direction: 'top', offset: [0,-28] })
           .on('click', function(){ openLightbox(v); });
+        visitMarkerCluster.addLayer(visitMarkers[v._id]);
       }
     });
     Object.keys(visitMarkers).forEach(function(id){
-      if(!seen[id]){ leafletMap.removeLayer(visitMarkers[id]); delete visitMarkers[id]; }
+      if(!seen[id]){ visitMarkerCluster.removeLayer(visitMarkers[id]); delete visitMarkers[id]; }
     });
   }
   function openLightbox(v){
