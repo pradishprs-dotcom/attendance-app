@@ -92,6 +92,9 @@
     justify-content:space-between;
     padding:0 30px;
     flex-shrink:0;
+    position:sticky;
+    top:0;
+    z-index:700;
   }
   .topbar h1{ font-family:'Space Grotesk', sans-serif; font-size:20px; font-weight:600; }
   .topbar .sub{ font-size:12.5px; color:var(--slate); margin-top:2px; }
@@ -130,6 +133,12 @@
     grid-template-columns:repeat(5, 1fr);
     gap:16px;
     margin-bottom:22px;
+    position:sticky;
+    top:72px;
+    z-index:690;
+    background:var(--bg);
+    padding-top:14px;
+    margin-top:-14px;
   }
   .stat-card{
     border-radius:14px;
@@ -223,7 +232,7 @@
   }
   .leaflet-tooltip.pin-tooltip::before{ display:none; }
   .map-search-icon-btn{
-    position:absolute; top:16px; left:16px; z-index:1000;
+    position:absolute; top:16px; right:16px; z-index:1000;
     width:38px; height:38px; border-radius:10px;
     background:var(--card); border:1px solid var(--line);
     display:flex; align-items:center; justify-content:center;
@@ -232,7 +241,7 @@
   }
   .map-search-icon-btn svg{ width:16px; height:16px; }
   .map-search-panel{
-    position:absolute; top:16px; left:16px; z-index:1001;
+    position:absolute; top:16px; right:16px; z-index:1001;
     background:var(--card); border:1px solid var(--line); border-radius:10px;
     width:250px; max-height:280px; overflow:hidden;
     box-shadow:0 8px 22px rgba(20,27,60,.16);
@@ -291,6 +300,23 @@
   .badge.present{ background:#FFF3E0; color:var(--amber-dk); }
   .badge.absent{ background:#FDE8EC; color:var(--pink-dk); }
   .r-dist{ font-family:'IBM Plex Mono', monospace; color:var(--slate); font-size:12.5px; }
+
+  /* Standard button-chip for small inline actions (Remove, Reset, Clear, etc) —
+     replaces plain colored/underlined text so every clickable action reads
+     clearly as a button, not just styled text. */
+  .action-chip{
+    display:inline-flex; align-items:center; justify-content:center;
+    padding:6px 13px; border-radius:8px;
+    font-size:11.5px; font-weight:600; font-family:inherit;
+    cursor:pointer; border:none; white-space:nowrap;
+    transition:filter .12s, transform .05s;
+  }
+  .action-chip:hover{ filter:brightness(0.96); }
+  .action-chip:active{ transform:scale(0.97); }
+  .action-chip.danger{ background:#FDE8EC; color:var(--pink-dk); }
+  .action-chip.neutral{ background:var(--bg); color:var(--navy); border:1px solid var(--line); }
+  .action-chip.primary{ background:#EAF0FE; color:var(--blue-dk); }
+  .action-chip.success{ background:#E4F9F1; color:var(--green-dk); }
 
   @media (max-width: 1180px){
     .grid-main{ grid-template-columns:1fr; }
@@ -414,7 +440,7 @@
         <div class="panel-head">
           <h2>Live employee location</h2>
           <div style="display:flex; align-items:center; gap:8px;">
-            <div id="clearLiveMapBtn" title="Clear stuck/stale pins" style="font-size:11px; color:var(--slate); cursor:pointer; text-decoration:underline;">Clear all</div>
+            <div id="clearLiveMapBtn" title="Clear stuck/stale pins" class="action-chip danger">Clear all</div>
             <div class="date-pill" id="mapStatusPill">Waiting for check-ins&hellip;</div>
           </div>
         </div>
@@ -1415,8 +1441,8 @@
           '<div><div style="font-weight:600; font-size:13px;">'+empNameById(r.empId)+'</div>'+
           '<div style="font-size:11.5px; color:var(--slate);">'+l.from+(l.to && l.to!==l.from ? ' → '+l.to : '')+' &middot; '+(l.reason||'')+'</div></div>'+
           '<div style="display:flex; gap:6px;">'+
-          '<button class="leave-act" data-emp="'+r.empId+'" data-idx="'+r.idx+'" data-status="approved" style="border:none; background:#E4F9F1; color:var(--green-dk); font-size:11px; font-weight:600; padding:6px 10px; border-radius:8px; cursor:pointer;">Approve</button>'+
-          '<button class="leave-act" data-emp="'+r.empId+'" data-idx="'+r.idx+'" data-status="rejected" style="border:none; background:#FDE8EC; color:var(--pink-dk); font-size:11px; font-weight:600; padding:6px 10px; border-radius:8px; cursor:pointer;">Reject</button>'+
+          '<button class="leave-act action-chip success" data-emp="'+r.empId+'" data-idx="'+r.idx+'" data-status="approved">Approve</button>'+
+          '<button class="leave-act action-chip danger" data-emp="'+r.empId+'" data-idx="'+r.idx+'" data-status="rejected">Reject</button>'+
           '</div></div>';
       }).join('');
       Array.prototype.forEach.call(host.querySelectorAll('.leave-act'), function(btn){
@@ -1450,7 +1476,7 @@
       host.innerHTML = list.map(function(h, i){
         return '<div style="display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--line); font-size:12.5px;">'+
           '<div><strong>'+(h.name||'Holiday')+'</strong> &middot; <span class="mono" style="color:var(--slate);">'+(h.date||'')+'</span></div>'+
-          '<span data-i="'+i+'" class="del-holiday" style="color:var(--pink-dk); cursor:pointer; font-size:11px;">Remove</span></div>';
+          '<span data-i="'+i+'" class="del-holiday action-chip danger" style="padding:5px 11px; font-size:10.5px;">Remove</span></div>';
       }).join('');
       Array.prototype.forEach.call(host.querySelectorAll('.del-holiday'), function(el){
         el.addEventListener('click', function(){
@@ -1621,7 +1647,7 @@
         '<div class="r-name">'+(e.name||'—')+'</div>'+
         '<div>'+(e.dept||'—')+'</div>'+
         '<div class="mono">'+(e.staffId||'—')+'</div>'+
-        '<div><span class="del-emp" data-id="'+e.id+'" style="color:var(--pink-dk); cursor:pointer; font-size:11.5px; font-weight:600;">Remove</span></div>'+
+        '<div><span class="del-emp action-chip danger" data-id="'+e.id+'" style="padding:5px 11px; font-size:10.5px;">Remove</span></div>'+
       '</div>';
     }).join('');
     Array.prototype.forEach.call(host.querySelectorAll('.del-emp'), function(el){
@@ -1676,7 +1702,7 @@
         var dateStr = d ? (d.getDate() + '/' + (d.getMonth()+1) + '/' + d.getFullYear()) : '—';
         return '<div style="display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--line); font-size:12.5px;'+(isDup?' background:#FFF7F0;':'')+'">'+
           '<div><strong>'+(b.empName||'—')+'</strong> <span class="mono" style="color:var(--slate);">&middot; registered '+dateStr+'</span>'+(isDup?' <span style="color:#DB8A0A; font-weight:600; font-size:10.5px;">&middot; DUPLICATE DEVICE</span>':'')+'</div>'+
-          '<span class="reset-device" data-id="'+id+'" style="color:var(--pink-dk); cursor:pointer; font-size:11px; font-weight:600;">Reset device</span>'+
+          '<span class="reset-device action-chip danger" data-id="'+id+'" style="padding:5px 11px; font-size:10.5px;">Reset device</span>'+
         '</div>';
       }).join('');
       Array.prototype.forEach.call(host.querySelectorAll('.reset-device'), function(el){
