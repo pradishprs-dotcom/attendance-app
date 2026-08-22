@@ -1174,6 +1174,17 @@
     maxZoom: 19,
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(leafletMap);
+
+  // Leaflet measures its container the instant it's created — if the page
+  // layout (fonts, flex sizing) hasn't fully settled yet, it can lock onto a
+  // tiny/wrong size and never self-correct. Force a re-check a few times as
+  // the page finishes loading, and again on any window resize.
+  [50, 300, 800].forEach(function(delay){
+    setTimeout(function(){ leafletMap.invalidateSize(); }, delay);
+  });
+  window.addEventListener('load', function(){ leafletMap.invalidateSize(); });
+  window.addEventListener('resize', function(){ leafletMap.invalidateSize(); });
+
   var markers = {}; // empId -> L.marker
   var presentEmployees = []; // [{id, name}] — currently live on the map, refreshed each render
 
