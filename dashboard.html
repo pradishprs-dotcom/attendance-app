@@ -410,7 +410,10 @@
       <div class="panel">
         <div class="panel-head">
           <h2>Live employee location</h2>
-          <div class="date-pill" id="mapStatusPill">Waiting for check-ins&hellip;</div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div id="clearLiveMapBtn" title="Clear stuck/stale pins" style="font-size:11px; color:var(--slate); cursor:pointer; text-decoration:underline;">Clear all</div>
+            <div class="date-pill" id="mapStatusPill">Waiting for check-ins&hellip;</div>
+          </div>
         </div>
         <div class="map-wrap">
           <div id="leafletMap"></div>
@@ -1293,6 +1296,13 @@
     }, function(err){ console.error(err); });
   }
 
+  document.getElementById('clearLiveMapBtn').addEventListener('click', function(){
+    if(!confirm('Clear all live map pins? Use this for pins stuck from a crashed app or dead phone — anyone genuinely still on duty will just reappear next time their phone sends an update.')) return;
+    ensureAuthReady().then(function(){
+      return db.collection(FS_COLLECTION).doc('field_locations').set({ value: '{}' });
+    }).catch(function(err){ console.error(err); showBanner('Could not clear live map — check Anonymous/Email auth is enabled in Firebase.'); });
+  });
+
   function loadTodayTasks(){
     if(!db) return;
     var d = new Date();
@@ -1608,13 +1618,25 @@
         host.innerHTML = '<div style="color:var(--slate); font-size:12.5px;">No devices registered yet — this fills in as employees check in from their phones.</div>';
         return;
       }
+      // Flag employees bound to more than one device — shouldn't happen going
+      // forward, but older data (or edge cases) can leave this behind.
+      var empDeviceCounts = {};
+      deviceIds.forEach(function(id){
+        var eid = bindings[id].empId;
+        empDeviceCounts[eid] = (empDeviceCounts[eid]||0) + 1;
+      });
+      var dupCount = deviceIds.filter(function(id){ return empDeviceCounts[bindings[id].empId] > 1; }).length;
+      var warningHtml = dupCount > 0
+        ? '<div style="background:#FFF3E0; color:#8a5316; font-size:11.5px; padding:10px 12px; border-radius:8px; margin-bottom:12px;">⚠ '+dupCount+' device(s) belong to an employee who\'s also registered on another phone — highlighted below. Reset all but one for accurate tracking.</div>'
+        : '';
       deviceIds.sort(function(a,b){ return (bindings[b].boundAt||0) - (bindings[a].boundAt||0); });
-      host.innerHTML = deviceIds.map(function(id){
+      host.innerHTML = warningHtml + deviceIds.map(function(id){
         var b = bindings[id];
+        var isDup = empDeviceCounts[b.empId] > 1;
         var d = b.boundAt ? new Date(b.boundAt) : null;
         var dateStr = d ? (d.getDate() + '/' + (d.getMonth()+1) + '/' + d.getFullYear()) : '—';
-        return '<div style="display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--line); font-size:12.5px;">'+
-          '<div><strong>'+(b.empName||'—')+'</strong> <span class="mono" style="color:var(--slate);">&middot; registered '+dateStr+'</span></div>'+
+        return '<div style="display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--line); font-size:12.5px;'+(isDup?' background:#FFF7F0;':'')+'">'+
+          '<div><strong>'+(b.empName||'—')+'</strong> <span class="mono" style="color:var(--slate);">&middot; registered '+dateStr+'</span>'+(isDup?' <span style="color:#DB8A0A; font-weight:600; font-size:10.5px;">&middot; DUPLICATE DEVICE</span>':'')+'</div>'+
           '<span class="reset-device" data-id="'+id+'" style="color:var(--pink-dk); cursor:pointer; font-size:11px; font-weight:600;">Reset device</span>'+
         '</div>';
       }).join('');

@@ -682,6 +682,16 @@
         alert('This phone is registered to ' + binding.empName + '. Ask your office admin to reset this device before using it for someone else.');
         return;
       }
+      // Reverse check: is this employee already locked to a DIFFERENT phone?
+      // Without this, the same person could quietly rack up several
+      // registered devices just by using a new phone once each time.
+      var otherDeviceId = Object.keys(bindings).filter(function(dId){
+        return dId !== deviceId && String(bindings[dId].empId) === String(e.id);
+      })[0];
+      if(otherDeviceId){
+        alert(e.name + ' is already registered on another phone. Ask your office admin to reset that device before checking in from a new one.');
+        return;
+      }
       proceedAfterDeviceCheck(e, deviceId, !binding);
     }).catch(function(err){
       console.error(err);
