@@ -1209,12 +1209,22 @@
   }).addTo(leafletMap);
 
   // Leaflet measures its container the instant it's created — if the page
-  // layout (fonts, flex sizing) hasn't fully settled yet, it can lock onto a
-  // tiny/wrong size and never self-correct. Force a re-check a few times as
-  // the page finishes loading, and again on any window resize.
-  [50, 300, 800].forEach(function(delay){
-    setTimeout(function(){ leafletMap.invalidateSize(); }, delay);
-  });
+  // layout hasn't fully settled yet (fonts, sticky header, flex reflow), it
+  // can lock onto a tiny/wrong size and never self-correct. A fixed-delay
+  // guess isn't reliable enough, so instead watch the container itself and
+  // re-check Leaflet's size the instant it actually changes, however late
+  // that happens to be.
+  if(window.ResizeObserver){
+    var mapResizeObserver = new ResizeObserver(function(){
+      leafletMap.invalidateSize();
+    });
+    mapResizeObserver.observe(document.getElementById('leafletMap'));
+  } else {
+    // Very old browser without ResizeObserver — fall back to a few timed checks.
+    [50, 300, 800, 1500].forEach(function(delay){
+      setTimeout(function(){ leafletMap.invalidateSize(); }, delay);
+    });
+  }
   window.addEventListener('load', function(){ leafletMap.invalidateSize(); });
   window.addEventListener('resize', function(){ leafletMap.invalidateSize(); });
 
