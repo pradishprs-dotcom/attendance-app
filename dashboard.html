@@ -83,6 +83,13 @@
 
   /* Main */
   .main{ flex:1; display:flex; flex-direction:column; min-width:0; margin-left:76px; width:calc(100% - 76px); }
+  .sticky-header{
+    position:sticky;
+    top:0;
+    z-index:700;
+    background:var(--bg);
+    flex-shrink:0;
+  }
   .topbar{
     height:72px;
     background:var(--card);
@@ -92,9 +99,6 @@
     justify-content:space-between;
     padding:0 30px;
     flex-shrink:0;
-    position:sticky;
-    top:0;
-    z-index:700;
   }
   .topbar h1{ font-family:'Space Grotesk', sans-serif; font-size:20px; font-weight:600; }
   .topbar .sub{ font-size:12.5px; color:var(--slate); margin-top:2px; }
@@ -132,13 +136,7 @@
     display:grid;
     grid-template-columns:repeat(5, 1fr);
     gap:16px;
-    margin-bottom:22px;
-    position:sticky;
-    top:72px;
-    z-index:690;
-    background:var(--bg);
-    padding-top:14px;
-    margin-top:-14px;
+    padding:18px 30px;
   }
   .stat-card{
     border-radius:14px;
@@ -377,6 +375,7 @@
 </div>
 
 <div class="main">
+  <div class="sticky-header">
   <div class="topbar">
     <div>
       <h1>Anantha Compass</h1>
@@ -401,11 +400,7 @@
     </div>
   </div>
 
-  <div class="content">
-
-    <div id="view-overview">
-
-    <div class="stats-row">
+    <div class="stats-row" id="topStatsRow">
       <div class="stat-card c1">
         <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20c1.5-4 4.5-6 7.5-6s6 2 7.5 6"/></svg></div>
         <div class="num" id="statEmployees">—</div>
@@ -432,6 +427,12 @@
         <div class="label">Departments</div>
       </div>
     </div>
+  </div>
+
+  <div class="content">
+
+    <div id="view-overview">
+
     <div id="connBanner" style="display:none; margin:-8px 0 18px; padding:10px 16px; border-radius:10px; background:#FFF3E0; color:#8a5316; font-size:12.5px; font-weight:500;"></div>
 
     <div class="grid-main" id="mapPanel">
