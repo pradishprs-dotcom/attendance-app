@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#522b82">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Install HRE app</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="install-page">
+  <main class="install">
+    <img class="login-logo" src="/logo.png" alt="Anantha MK Institute of Medical Sciences LLP">
+    <h1>Install the HRE app</h1>
+    <p class="muted">Put Hospital Rental Equipment on your phone or computer like a normal app. No app store needed.</p>
+
+    <div class="install-actions">
+      <button id="install-btn" class="btn primary" hidden>Install app now</button>
+      <a class="btn" href="/">Open the app</a>
+    </div>
+    <p id="install-msg" class="note" hidden></p>
+
+    <section class="card" id="sec-android"><h2>Android phone (Chrome)</h2>
+      <ol><li>Open this page in <b>Chrome</b>.</li><li>Tap <b>Install app now</b> above, or the <b>⋮</b> menu at the top right.</li><li>Choose <b>Install app</b> (or <b>Add to Home screen</b>) and confirm.</li><li>The purple lotus icon appears on your home screen.</li></ol></section>
+
+    <section class="card" id="sec-ios"><h2>iPhone / iPad (Safari)</h2>
+      <ol><li>Open this page in <b>Safari</b> (not Chrome).</li><li>Tap the <b>Share</b> button (square with an up arrow).</li><li>Scroll and tap <b>Add to Home Screen</b>.</li><li>Tap <b>Add</b>. The icon appears on your home screen.</li></ol></section>
+
+    <section class="card" id="sec-desktop"><h2>Windows / Mac computer (Chrome or Edge)</h2>
+      <ol><li>Open the site in <b>Chrome</b> or <b>Edge</b>.</li><li>Click <b>Install app now</b> above, or the install icon at the right end of the address bar.</li><li>Click <b>Install</b>. It opens in its own window and can be pinned to the taskbar.</li></ol></section>
+
+    <section class="card"><h2>Share with your team</h2>
+      <p class="small muted">Staff can scan this code with their phone camera to open this page.</p>
+      <div class="qr qrbig" id="site-qr" role="img" aria-label="QR code for the install page"></div>
+      <p class="mono small" id="site-url"></p></section>
+  </main>
+  <script src="/vendor/qrcode.js"></script>
+  <script src="/install.js"></script>
+</body>
+</html>

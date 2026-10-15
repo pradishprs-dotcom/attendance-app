@@ -1,0 +1,74 @@
+{
+  "name": "Hospital Rental Equipment Manager",
+  "short_name": "Rental Equip",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0f2a43",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "id": "/",
+  "scope": "/",
+  "orientation": "any",
+  "categories": [
+    "business",
+    "medical"
+  ],
+  "description": "Track rented hospital equipment: gate passes, QR scanning, return alerts and reports.",
+  "shortcuts": [
+    {
+      "name": "Scan equipment",
+      "short_name": "Scan",
+      "url": "/#/scan",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "New gate pass",
+      "short_name": "Gate pass",
+      "url": "/#/gatepasses/new",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Return alerts",
+      "short_name": "Alerts",
+      "url": "/#/alerts",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
+  ]
+}
